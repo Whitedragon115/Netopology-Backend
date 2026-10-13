@@ -26,6 +26,7 @@ type Querier interface {
 	DeleteSession(ctx context.Context, id uuid.UUID) error
 	// Password reset, account disabled: end every session of that user.
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error)
 	DemoteInstanceOwner(ctx context.Context, id uuid.UUID) error
 	GetActiveUserByEmail(ctx context.Context, email string) (User, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (UserIdentity, error)
@@ -44,6 +45,7 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
+	GetWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error)
 	GetWorkspaceEvent(ctx context.Context, arg GetWorkspaceEventParams) (WorkspaceEvent, error)
 	HasManagerMembership(ctx context.Context, userID uuid.UUID) (bool, error)
 	HasRecentProviderSignIn(ctx context.Context, arg HasRecentProviderSignInParams) (bool, error)
@@ -62,11 +64,14 @@ type Querier interface {
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Resume after Last-Event-ID (UUIDv7 ids sort by time).
 	ListWorkspaceEventsAfter(ctx context.Context, arg ListWorkspaceEventsAfterParams) ([]WorkspaceEvent, error)
+	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error)
+	LockWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error)
 	LookupUserByUsername(ctx context.Context, username string) (LookupUserByUsernameRow, error)
 	PruneWorkspaceEvents(ctx context.Context, keepHours int32) (int64, error)
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
 	SetUserLastLogin(ctx context.Context, id uuid.UUID) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
+	SlugExists(ctx context.Context, slug string) (bool, error)
 	TouchIdentity(ctx context.Context, id uuid.UUID) error
 	// Sliding expiry. Called at most once per minute per session (see auth.Middleware).
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
@@ -74,6 +79,7 @@ type Querier interface {
 	TryLockSetup(ctx context.Context) (bool, error)
 	UnlinkIdentity(ctx context.Context, arg UnlinkIdentityParams) (int64, error)
 	UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error)
+	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)
 	UpsertInstanceSetting(ctx context.Context, arg UpsertInstanceSettingParams) error
 }
 

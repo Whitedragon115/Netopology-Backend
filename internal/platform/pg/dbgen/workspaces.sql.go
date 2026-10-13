@@ -7,6 +7,8 @@ package dbgen
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -50,6 +52,45 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 	return i, err
 }
 
+const deleteWorkspace = `-- name: DeleteWorkspace :execrows
+DELETE FROM workspaces WHERE id = $1 AND version = $2
+`
+
+type DeleteWorkspaceParams struct {
+	ID      uuid.UUID
+	Version int32
+}
+
+func (q *Queries) DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteWorkspace, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getWorkspace = `-- name: GetWorkspace :one
+SELECT id, name, slug, description, is_protected, settings, created_by, created_at, updated_at, version FROM workspaces WHERE id = $1
+`
+
+func (q *Queries) GetWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error) {
+	row := q.db.QueryRow(ctx, getWorkspace, id)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsProtected,
+		&i.Settings,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const insertMember = `-- name: InsertMember :exec
 INSERT INTO workspace_members (workspace_id, user_id, role, can_view_sensitive, added_by)
 VALUES ($1, $2, $3, $4, $5)
@@ -72,4 +113,136 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) erro
 		arg.AddedBy,
 	)
 	return err
+}
+
+const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
+SELECT w.id, w.name, w.slug, w.description, w.is_protected, w.settings, w.created_by, w.created_at, w.updated_at, w.version, m.role AS member_role, m.can_view_sensitive
+FROM workspaces w
+JOIN workspace_members m ON m.workspace_id = w.id
+WHERE m.user_id = $1
+ORDER BY w.created_at, w.id
+`
+
+type ListWorkspacesForUserRow struct {
+	ID               uuid.UUID
+	Name             string
+	Slug             string
+	Description      string
+	IsProtected      bool
+	Settings         json.RawMessage
+	CreatedBy        *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	Version          int32
+	MemberRole       string
+	CanViewSensitive bool
+}
+
+func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspacesForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWorkspacesForUserRow{}
+	for rows.Next() {
+		var i ListWorkspacesForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsProtected,
+			&i.Settings,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+			&i.MemberRole,
+			&i.CanViewSensitive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockWorkspace = `-- name: LockWorkspace :one
+SELECT id, name, slug, description, is_protected, settings, created_by, created_at, updated_at, version FROM workspaces WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error) {
+	row := q.db.QueryRow(ctx, lockWorkspace, id)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsProtected,
+		&i.Settings,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
+const slugExists = `-- name: SlugExists :one
+SELECT EXISTS(SELECT 1 FROM workspaces WHERE slug = $1)
+`
+
+func (q *Queries) SlugExists(ctx context.Context, slug string) (bool, error) {
+	row := q.db.QueryRow(ctx, slugExists, slug)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const updateWorkspace = `-- name: UpdateWorkspace :one
+UPDATE workspaces
+SET name = $2, slug = $3, description = $4, is_protected = $5, settings = $6
+WHERE id = $1 AND version = $7
+RETURNING id, name, slug, description, is_protected, settings, created_by, created_at, updated_at, version
+`
+
+type UpdateWorkspaceParams struct {
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+	IsProtected bool
+	Settings    json.RawMessage
+	Version     int32
+}
+
+func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error) {
+	row := q.db.QueryRow(ctx, updateWorkspace,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+		arg.IsProtected,
+		arg.Settings,
+		arg.Version,
+	)
+	var i Workspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsProtected,
+		&i.Settings,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
 }
