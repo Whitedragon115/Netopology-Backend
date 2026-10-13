@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -22,6 +23,9 @@ import (
 func Middleware(db *pg.DB, ttl time.Duration, cookies httpx.Cookies, log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if oauth, err := r.Cookie(httpx.OAuthCookieName); err == nil {
+				r = r.WithContext(context.WithValue(r.Context(), oauthCookieKey{}, oauth.Value))
+			}
 			ck, err := r.Cookie(httpx.SessionCookieName)
 			if err != nil || ck.Value == "" || len(ck.Value) > 100 {
 				next.ServeHTTP(w, r)

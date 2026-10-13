@@ -27,6 +27,8 @@ func (h *Handler) Register(api huma.API) {
 		httpx.Status(204), httpx.Errors(401, 422)), h.changeMyPassword)
 	huma.Register(api, httpx.Op(authz.MeIdentityList, http.MethodGet, "/me/identities",
 		"listMyIdentities", "Me", "My linked Google/Discord sign-ins", httpx.Errors(401)), h.listMyIdentities)
+	huma.Register(api, httpx.Op(authz.MeIdentityLink, http.MethodGet, "/me/identities/{provider}/link",
+		"linkMyIdentity", "Me", "Link a Google/Discord account to me (browser redirect)", httpx.Status(302), httpx.Errors(401, 409)), h.linkMyIdentity)
 	huma.Register(api, httpx.Op(authz.MeIdentityUnlink, http.MethodDelete, "/me/identities/{identityId}",
 		"unlinkMyIdentity", "Me", "Unlink a sign-in (not the last way to sign in)", httpx.Status(204), httpx.Errors(401, 404, 409)), h.unlinkMyIdentity)
 	huma.Register(api, httpx.Op(authz.UserList, http.MethodGet, "/users",
@@ -97,6 +99,24 @@ func (h *Handler) listMyIdentities(ctx context.Context, _ *struct{}) (*listMyIde
 
 type unlinkMyIdentityInput struct {
 	IdentityID uuid.UUID `path:"identityId"`
+}
+
+type (
+	linkMyIdentityInput struct {
+		Provider string `path:"provider" enum:"google,discord"`
+	}
+	linkMyIdentityOutput struct {
+		Location  string      `header:"Location"`
+		SetCookie http.Cookie `header:"Set-Cookie"`
+	}
+)
+
+func (h *Handler) linkMyIdentity(ctx context.Context, in *linkMyIdentityInput) (*linkMyIdentityOutput, error) {
+	location, cookie, err := h.svc.LinkMyIdentity(ctx, in.Provider)
+	if err != nil {
+		return nil, err
+	}
+	return &linkMyIdentityOutput{Location: location, SetCookie: cookie}, nil
 }
 
 func (h *Handler) unlinkMyIdentity(ctx context.Context, in *unlinkMyIdentityInput) (*struct{}, error) {

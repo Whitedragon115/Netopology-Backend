@@ -20,15 +20,23 @@ import (
 )
 
 type Service struct {
-	db       *pg.DB
-	config   *config.Config
-	sessions *Sessions
-	limiter  *loginLimiter
+	db        *pg.DB
+	config    *config.Config
+	sessions  *Sessions
+	limiter   *loginLimiter
+	providers map[string]OAuthProvider
+	signer    *crypto.Signer
 }
 
 func NewService(db *pg.DB, cfg *config.Config, sessions *Sessions) *Service {
-	return &Service{db: db, config: cfg, sessions: sessions, limiter: newLoginLimiter(time.Now)}
+	return &Service{
+		db: db, config: cfg, sessions: sessions, limiter: newLoginLimiter(time.Now),
+		providers: defaultOAuthProviders(cfg), signer: crypto.NewSigner(cfg.SecretKey, "oauth"),
+	}
 }
+
+// SetOAuthProviders lets tests substitute local HTTP providers without changing database behavior.
+func (s *Service) SetOAuthProviders(providers map[string]OAuthProvider) { s.providers = providers }
 
 // Providers is public (permissions.md §3 auth.providers).
 func (s *Service) Providers(_ context.Context) AuthProviders {

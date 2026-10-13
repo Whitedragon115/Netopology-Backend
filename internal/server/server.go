@@ -35,9 +35,10 @@ var Version = "0.1.0-dev"
 
 // Deps are the process-wide dependencies handed to features.
 type Deps struct {
-	Config *config.Config
-	DB     *pg.DB
-	Log    *slog.Logger
+	Config         *config.Config
+	DB             *pg.DB
+	Log            *slog.Logger
+	OAuthProviders map[string]auth.OAuthProvider
 }
 
 // featureHandler is what every feature exposes to the server.
@@ -94,11 +95,17 @@ func problem(status int, code, detail string) http.HandlerFunc {
 func features(d Deps) []featureHandler {
 	az := authz.NewResolver(d.DB)
 	sessions := &auth.Sessions{TTL: d.Config.SessionTTL, Cookies: httpx.Cookies{Secure: d.Config.CookieSecure}}
+	authService := auth.NewService(d.DB, d.Config, sessions)
+	if d.OAuthProviders != nil {
+		authService.SetOAuthProviders(d.OAuthProviders)
+	}
+	accountService := account.NewService(d.DB)
+	accountService.SetOAuthLinkStarter(authService)
 
 	return []featureHandler{
 		setup.NewHandler(setup.NewService(d.DB, sessions)),
-		auth.NewHandler(auth.NewService(d.DB, d.Config, sessions)),
-		account.NewHandler(account.NewService(d.DB)),
+		auth.NewHandler(authService),
+		account.NewHandler(accountService),
 		workspace.NewHandler(workspace.NewService(d.DB, az)),
 		member.NewHandler(member.NewService(d.DB, az)),
 		inventory.NewHandler(inventory.NewService(d.DB, az)),

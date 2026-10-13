@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Whitedragon115/Netopology-Backend/internal/auth"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/config"
 	"github.com/Whitedragon115/Netopology-Backend/internal/server"
 )
@@ -27,6 +28,15 @@ type API struct {
 
 // NewAPI starts the real HTTP stack (all middleware, all features) against Postgres(t).
 func NewAPI(t testing.TB) *API {
+	return newAPI(t, nil)
+}
+
+// NewAPIWithOAuth uses the real API and database with fake provider HTTP supplied by the test.
+func NewAPIWithOAuth(t testing.TB, providers map[string]auth.OAuthProvider) *API {
+	return newAPI(t, providers)
+}
+
+func newAPI(t testing.TB, providers map[string]auth.OAuthProvider) *API {
 	t.Helper()
 	d := Postgres(t)
 	cfg := &config.Config{
@@ -39,11 +49,17 @@ func NewAPI(t testing.TB) *API {
 		SecretKeyB64:   base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")),
 		SessionTTL:     24 * time.Hour,
 	}
+	if providers["google"] != nil {
+		cfg.GoogleClientID, cfg.GoogleClientSecret = "test-google", "test-secret"
+	}
+	if providers["discord"] != nil {
+		cfg.DiscordClientID, cfg.DiscordClientSecret = "test-discord", "test-secret"
+	}
 	log := slog.New(slog.DiscardHandler)
 	if testing.Verbose() {
 		log = slog.New(slog.NewTextHandler(testWriter{t}, nil))
 	}
-	h, err := server.New(server.Deps{Config: cfg, DB: d.DB, Log: log})
+	h, err := server.New(server.Deps{Config: cfg, DB: d.DB, Log: log, OAuthProviders: providers})
 	if err != nil {
 		t.Fatal(err)
 	}

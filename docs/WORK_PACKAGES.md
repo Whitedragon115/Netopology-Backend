@@ -11,7 +11,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | 02 | Full stack in Docker (parent repo compose) | 01 | 🟡 files done, both images build; first `docker compose up` on a local engine still to verify |
 | 03 | Password sign-in, logout, providers, `getMe` | 01 | ✅ done |
 | 04 | Accounts: `/me`, `/users`, instance settings | 03 | ✅ done |
-| 05 | Google + Discord sign-in and linking | 04 | ⏳ |
+| 05 | Google + Discord sign-in and linking | 04 | ✅ done |
 | 06 | Workspaces | 03 | ⏳ |
 | 07 | Members and canvas grants | 06 | ⏳ |
 | 08 | Inventory reads, visibility set, redaction | 07 | ⏳ |
