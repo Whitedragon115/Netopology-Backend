@@ -12,6 +12,8 @@ import (
 )
 
 type Querier interface {
+	CountNodeLinks(ctx context.Context, arg CountNodeLinksParams) (int64, error)
+	CountNodeNotes(ctx context.Context, arg CountNodeNotesParams) (int64, error)
 	CountTabCanvases(ctx context.Context, arg CountTabCanvasesParams) (int64, error)
 	CountUserIdentities(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Feature: setup (internal/setup). Reference implementation, see docs/ARCHITECTURE.md §12.
@@ -31,16 +33,20 @@ type Querier interface {
 	DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error)
 	DemoteInstanceOwner(ctx context.Context, id uuid.UUID) error
 	GetActiveUserByEmail(ctx context.Context, email string) (User, error)
+	GetAreaVisible(ctx context.Context, arg GetAreaVisibleParams) (GetAreaVisibleRow, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (UserIdentity, error)
 	GetIdentityForUser(ctx context.Context, arg GetIdentityForUserParams) (UserIdentity, error)
 	GetIdentityForUserProvider(ctx context.Context, arg GetIdentityForUserProviderParams) (UserIdentity, error)
 	GetInstanceOwnerForUpdate(ctx context.Context) (User, error)
 	// Instance settings are not workspace scoped. Services authorize all access.
 	GetInstanceSetting(ctx context.Context, key string) (json.RawMessage, error)
+	GetLinkVisible(ctx context.Context, arg GetLinkVisibleParams) (Link, error)
 	GetMember(ctx context.Context, arg GetMemberParams) (GetMemberRow, error)
 	// Authorization lookups (internal/authz). Used by every workspace-scoped request.
 	// workspace_members has no RLS (it decides access). No row = not a member = 404.
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	GetNodeVisible(ctx context.Context, arg GetNodeVisibleParams) (Node, error)
+	GetNoteVisible(ctx context.Context, arg GetNoteVisibleParams) (Note, error)
 	// Resolves a cookie to the signed-in user. Disabled users and expired sessions resolve to nothing.
 	GetSessionPrincipal(ctx context.Context, tokenHash []byte) (GetSessionPrincipalRow, error)
 	// Accounts (internal/auth, internal/account, internal/setup).
@@ -59,14 +65,19 @@ type Querier interface {
 	// Must run inside pg.InWorkspace (RLS). Notifies listeners on commit.
 	InsertWorkspaceEvent(ctx context.Context, arg InsertWorkspaceEventParams) (uuid.UUID, error)
 	LinkIdentity(ctx context.Context, arg LinkIdentityParams) (UserIdentity, error)
+	ListAreasVisible(ctx context.Context, arg ListAreasVisibleParams) ([]ListAreasVisibleRow, error)
 	// Editors only. canvas_grants has RLS: call inside pg.InWorkspace.
 	ListGrantedCanvasIDs(ctx context.Context, arg ListGrantedCanvasIDsParams) ([]uuid.UUID, error)
 	ListIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
 	// For Account.identities.
 	ListIdentityProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
+	ListLinksVisible(ctx context.Context, arg ListLinksVisibleParams) ([]Link, error)
 	ListMemberGrants(ctx context.Context, arg ListMemberGrantsParams) ([]uuid.UUID, error)
 	// Membership records are access-control data, so these joins run outside RLS.
 	ListMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListMembersRow, error)
+	ListNodeUsageCanvases(ctx context.Context, arg ListNodeUsageCanvasesParams) ([]ListNodeUsageCanvasesRow, error)
+	ListNodesVisible(ctx context.Context, arg ListNodesVisibleParams) ([]Node, error)
+	ListNotesVisible(ctx context.Context, arg ListNotesVisibleParams) ([]Note, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Resume after Last-Event-ID (UUIDv7 ids sort by time).
 	ListWorkspaceEventsAfter(ctx context.Context, arg ListWorkspaceEventsAfterParams) ([]WorkspaceEvent, error)
@@ -91,6 +102,9 @@ type Querier interface {
 	UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error)
 	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)
 	UpsertInstanceSetting(ctx context.Context, arg UpsertInstanceSettingParams) error
+	// Every query here runs inside pg.InWorkspace and filters by workspace_id.
+	// Editor visibility is computed in SQL, not by loading the full inventory into Go.
+	VisibleInventoryIDs(ctx context.Context, arg VisibleInventoryIDsParams) (VisibleInventoryIDsRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
