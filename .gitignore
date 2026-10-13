@@ -1,0 +1,12 @@
+# local settings and build output
+.env
+/bin/
+/tmp/
+*.exe
+coverage.out
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
+.task/

@@ -1,0 +1,65 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint      # use errors.Is/As and %w
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - sqlclosecheck
+    - unconvert
+    - usestdlibvars
+    - depguard
+  settings:
+    depguard:
+      rules:
+        layers:
+          files: ["**/internal/**/handler.go", "**/internal/**/feature.go"]
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: "handlers never touch the database: call the service (CONVENTIONS.md §3.1)"
+        no-legacy:
+          deny:
+            - pkg: github.com/pkg/errors
+              desc: use the standard library errors package
+            - pkg: io/ioutil
+              desc: use io and os
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.DB).Close
+        - (*github.com/jackc/pgx/v5.Conn).Close
+    gosec:
+      excludes:
+        - G115 # integer conversions, noisy for int32 versions
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    generated: lax
+    paths:
+      - internal/platform/pg/dbgen
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, bodyclose]
+      - path: internal/platform/testutil/
+        linters: [gosec]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes: [github.com/Whitedragon115/Netopology-Backend]
+  exclusions:
+    paths:
+      - internal/platform/pg/dbgen

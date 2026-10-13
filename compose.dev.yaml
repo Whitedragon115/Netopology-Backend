@@ -1,0 +1,27 @@
+# Development database for working on the backend alone (`task db:up`).
+# The full stack (gateway, web, api, worker, db) is compose.yaml in the parent Netopology repo.
+#
+# Postgres is published on 127.0.0.1 only. The init script creates netopology_owner and
+# netopology_app on the FIRST start (empty volume); `task db:reset` wipes the volume.
+name: netopology-dev
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: ${NETOPOLOGY_DB_SUPERUSER_PASSWORD:-postgres}
+      NETOPOLOGY_DB_OWNER_PASSWORD: ${NETOPOLOGY_DB_OWNER_PASSWORD:-owner}
+      NETOPOLOGY_DB_APP_PASSWORD: ${NETOPOLOGY_DB_APP_PASSWORD:-app}
+    ports:
+      - "127.0.0.1:${NETOPOLOGY_DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d netopology"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:

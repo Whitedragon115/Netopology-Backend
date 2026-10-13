@@ -1,0 +1,119 @@
+# Task runner (https://taskfile.dev). Nothing to install: run it through Go.
+#   go tool task           list tasks
+#   go tool task dev       run the api with live reload
+# Tip: alias t='go tool task'
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  TOOL: go tool -modfile=tools/go.mod
+
+env:
+  CGO_ENABLED: "0"
+
+tasks:
+  default:
+    cmds: [task --list]
+    silent: true
+
+  setup:
+    desc: First-time setup (creates .env from .env.example, downloads modules)
+    cmds:
+      - cmd: '{{if eq OS "windows"}}powershell -NoProfile -Command "if (!(Test-Path .env)) { Copy-Item .env.example .env }"{{else}}test -f .env || cp .env.example .env{{end}}'
+      - go mod download
+      - go mod download -modfile=tools/go.mod
+
+  # ── database ─────────────────────────────────────────────
+  db:up:
+    desc: Start the development Postgres 18 (localhost:5432)
+    cmds: [docker compose -f compose.dev.yaml up -d --wait]
+
+  db:down:
+    desc: Stop the development database (data is kept)
+    cmds: [docker compose -f compose.dev.yaml down]
+
+  db:reset:
+    desc: Delete the development database volume and start fresh
+    prompt: This deletes all local development data. Continue?
+    cmds:
+      - docker compose -f compose.dev.yaml down -v
+      - task: db:up
+
+  db:psql:
+    desc: Open psql as the app role (RLS applies)
+    interactive: true
+    cmds: [docker compose -f compose.dev.yaml exec -e PGPASSWORD=app db psql -h localhost -U netopology_app netopology]
+
+  db:scenarios:
+    desc: Run the schema checks (db/tests/scenarios.sql) as the app role; prints PASS lines
+    cmds:
+      - docker compose -f compose.dev.yaml cp db/tests/scenarios.sql db:/tmp/scenarios.sql
+      - docker compose -f compose.dev.yaml exec -e PGPASSWORD=app db psql -q -h localhost -U netopology_app -d netopology -f /tmp/scenarios.sql
+
+  migrate:
+    desc: Apply migrations (goose + River)
+    cmds: [go run ./cmd/netopology migrate]
+
+  migrate:status:
+    desc: Show applied and pending migrations
+    cmds: [go run ./cmd/netopology migrate status]
+
+  # ── run ──────────────────────────────────────────────────
+  dev:
+    desc: Run the api with live reload (air) on :8080
+    cmds: ["{{.TOOL}} air -c .air.toml"]
+
+  worker:
+    desc: Run the worker
+    cmds: [go run ./cmd/netopology worker]
+
+  # ── code generation ──────────────────────────────────────
+  gen:
+    desc: Regenerate everything generated (sqlc, OpenAPI)
+    cmds:
+      - task: gen:sqlc
+      - task: gen:openapi
+
+  gen:sqlc:
+    desc: db/queries/*.sql -> internal/platform/pg/dbgen
+    sources: [db/migrations/*.sql, db/queries/*.sql, sqlc.yaml]
+    cmds: ["{{.TOOL}} sqlc generate"]
+
+  gen:openapi:
+    desc: Write the OpenAPI generated from the Go code to api/openapi.gen.yaml
+    cmds: [go run ./cmd/netopology openapi -o api/openapi.gen.yaml]
+
+  # ── quality ──────────────────────────────────────────────
+  fmt:
+    desc: Format code (gofumpt + goimports via golangci-lint)
+    cmds: ["{{.TOOL}} golangci-lint fmt"]
+
+  lint:
+    desc: Lint
+    cmds: ["{{.TOOL}} golangci-lint run"]
+
+  test:
+    desc: Unit + contract tests; integration tests too when NETOPOLOGY_TEST_ADMIN_URL is set
+    cmds: ["go test ./... {{.CLI_ARGS}}"]
+
+  test:strict:
+    desc: Like test, but fails while any contract operation is unimplemented
+    env: { CONTRACT_STRICT: "1" }
+    cmds: ["go test ./... {{.CLI_ARGS}}"]
+
+  check:
+    desc: What CI runs. Run before every commit.
+    cmds:
+      - task: gen
+      - git diff --exit-code -- internal/platform/pg/dbgen api/openapi.gen.yaml
+      - task: lint
+      - task: test
+
+  build:
+    desc: Build the binary to ./bin
+    cmds: ["go build -o bin/netopology{{exeExt}} ./cmd/netopology"]
+
+  docker:build:
+    desc: Build the container image
+    cmds: [docker build -t netopology-backend:dev .]

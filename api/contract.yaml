@@ -1,0 +1,2664 @@
+openapi: 3.1.0
+info:
+  title: Netopology API
+  version: 0.1.0-draft
+  summary: Draw, understand and operate your whole infrastructure.
+  description: |
+    **Status: design draft (phase A3).** This is the contract for the first slice: accounts, workspaces,
+    members, inventory (areas, nodes, links, notes), canvases, sharing and live events.
+    Plugins, workflows and export are added in later phases.
+
+    ## Conventions
+    - Base path `/api/v1`. JSON uses **camelCase**. IDs are **UUID v7** strings.
+    - Workspace data lives under `/workspaces/{wsId}/…`. Not being a member returns **404**, never 403.
+    - **Auth:** a session cookie (HttpOnly, Secure; SameSite=Lax so the Google/Discord redirect can complete),
+      set by username/password login or by the OAuth callback. Mutating requests must come from the same origin
+      (checked via `Origin`). There is no self-signup: accounts are created by the server owner/admin.
+    - **Concurrency:** versioned resources return an `ETag` (their `version`). Send it back in `If-Match`
+      on PATCH/DELETE; a stale version returns **412**.
+    - **Errors:** [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` with a stable
+      `code` (for example `inventory.used_elsewhere`) that clients can switch on.
+    - **Lists:** cursor pagination: pass `nextCursor` back as `cursor`. `limit` defaults to 50, max 200.
+    - **Permissions:** every operation has an `x-permission` key, defined in `docs/design/permissions.md`.
+      The same key is written to the audit log.
+    - **Redaction:** sensitive fields and notes are redacted server-side according to the caller
+      (see `Field.redacted`, `Note.redacted`).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://localhost/api/v1
+    description: Local Docker Compose stack
+security:
+  - session: []
+
+tags:
+  - name: Setup & auth
+  - name: Me
+  - name: Instance
+    description: Accounts and server settings. Server owner and server admins only.
+  - name: Workspaces
+  - name: Members
+  - name: Areas
+  - name: Nodes
+  - name: Links
+  - name: Notes
+  - name: Canvases
+  - name: Share links
+    description: Manage guest links (owner/admin).
+  - name: Guest
+    description: Public endpoints used by people opening a share link.
+  - name: Events
+  - name: Audit
+
+paths:
+  # ───────────────────────── Setup & auth ─────────────────────────
+  /setup:
+    get:
+      tags: [Setup & auth]
+      operationId: getSetupStatus
+      summary: Check whether first-run setup is needed
+      x-permission: setup.status
+      security: []
+      responses:
+        '200':
+          description: Setup status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupStatus' }
+    post:
+      tags: [Setup & auth]
+      operationId: completeSetup
+      summary: Create the first account (becomes server owner)
+      description: Only works while no account exists. Optionally creates the first workspace. Signs the new user in.
+      x-permission: setup.complete
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetupRequest' }
+      responses:
+        '201':
+          description: First account created and signed in
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /auth/login:
+    post:
+      tags: [Setup & auth]
+      operationId: login
+      summary: Sign in
+      x-permission: auth.login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/providers:
+    get:
+      tags: [Setup & auth]
+      operationId: listAuthProviders
+      summary: Which sign-in methods are enabled
+      description: Google and Discord appear only when the server has OAuth client credentials configured.
+      x-permission: auth.providers
+      security: []
+      responses:
+        '200':
+          description: Enabled methods
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthProviders' }
+
+  /auth/oauth/{provider}/start:
+    parameters:
+      - $ref: '#/components/parameters/Provider'
+    get:
+      tags: [Setup & auth]
+      operationId: startOAuthSignIn
+      summary: Begin Google/Discord sign-in (browser redirect)
+      x-permission: auth.oauth_start
+      security: []
+      parameters:
+        - name: returnTo
+          in: query
+          description: Same-origin path to return to after sign-in
+          schema: { type: string, default: / }
+      responses:
+        '302':
+          description: Redirect to the provider's consent screen (state and PKCE kept in a short-lived cookie)
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /auth/oauth/{provider}/callback:
+    parameters:
+      - $ref: '#/components/parameters/Provider'
+    get:
+      tags: [Setup & auth]
+      operationId: finishOAuthSignIn
+      summary: Provider redirects back here
+      description: |
+        Signs in only if the identity is linked to an existing account, or if an account's email matches the
+        provider-**verified** email and has no identity for this provider yet (it is then linked).
+        Never creates an account. On failure redirects to the sign-in page with
+        `?error=identity_not_linked` (or another `code`). Also completes `me.identity_link` flows.
+      x-permission: auth.oauth_callback
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        '302':
+          description: Back to the app (session cookie set on success)
+          headers:
+            Location: { schema: { type: string } }
+            Set-Cookie: { $ref: '#/components/headers/SessionCookie' }
+
+  /auth/logout:
+    post:
+      tags: [Setup & auth]
+      operationId: logout
+      summary: Sign out (ends the current session)
+      x-permission: auth.logout
+      responses:
+        '204': { description: Signed out }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ───────────────────────── Me ─────────────────────────
+  /me:
+    get:
+      tags: [Me]
+      operationId: getMe
+      summary: Get the signed-in account
+      x-permission: me.read
+      responses:
+        '200':
+          description: Current account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Me]
+      operationId: updateMe
+      summary: Update my profile
+      x-permission: me.update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MeUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /me/password:
+    post:
+      tags: [Me]
+      operationId: changeMyPassword
+      summary: Change my password
+      description: Requires the current password. Ends all other sessions.
+      x-permission: me.password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChange' }
+      responses:
+        '204': { description: Password changed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /me/identities:
+    get:
+      tags: [Me]
+      operationId: listMyIdentities
+      summary: My linked Google/Discord sign-ins
+      x-permission: me.identity_list
+      responses:
+        '200':
+          description: Linked identities
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, hasPassword]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Identity' }
+                  hasPassword: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/identities/{provider}/link:
+    parameters:
+      - $ref: '#/components/parameters/Provider'
+    get:
+      tags: [Me]
+      operationId: linkMyIdentity
+      summary: Link a Google/Discord account to me (browser redirect)
+      x-permission: me.identity_link
+      responses:
+        '302':
+          description: Redirect to the provider; returns through the OAuth callback
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /me/identities/{identityId}:
+    parameters:
+      - name: identityId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Id' }
+    delete:
+      tags: [Me]
+      operationId: unlinkMyIdentity
+      summary: Unlink a sign-in (not the last way to sign in)
+      x-permission: me.identity_unlink
+      responses:
+        '204': { description: Unlinked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ───────────────────────── Instance ─────────────────────────
+  /users:
+    get:
+      tags: [Instance]
+      operationId: listUsers
+      summary: List accounts
+      x-permission: user.list
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: q
+          in: query
+          description: Filter by username or display name
+          schema: { type: string }
+      responses:
+        '200':
+          description: Accounts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Instance]
+      operationId: createUser
+      summary: Create an account
+      x-permission: user.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /users/lookup:
+    get:
+      tags: [Instance]
+      operationId: lookupUser
+      summary: Find a user by exact username (to add as a member)
+      description: Available to owners and admins of any workspace. Returns public profile only.
+      x-permission: user.lookup
+      parameters:
+        - name: username
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Instance]
+      operationId: getUser
+      summary: Get an account
+      x-permission: user.read
+      responses:
+        '200':
+          description: Account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Instance]
+      operationId: updateUser
+      summary: Update an account (disable, change server role, ...)
+      x-permission: user.update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/{userId}/password:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [Instance]
+      operationId: resetUserPassword
+      summary: Set a new password for an account
+      description: Ends all of that user's sessions.
+      x-permission: user.password_reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordReset' }
+      responses:
+        '204': { description: Password reset }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /instance/settings:
+    get:
+      tags: [Instance]
+      operationId: getInstanceSettings
+      summary: Get server settings
+      x-permission: instance.settings_read
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstanceSettings' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [Instance]
+      operationId: updateInstanceSettings
+      summary: Update server settings
+      x-permission: instance.settings_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InstanceSettings' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstanceSettings' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ───────────────────────── Workspaces ─────────────────────────
+  /workspaces:
+    get:
+      tags: [Workspaces]
+      operationId: listWorkspaces
+      summary: List workspaces I am a member of
+      x-permission: workspace.list
+      responses:
+        '200':
+          description: My workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Workspace' }
+    post:
+      tags: [Workspaces]
+      operationId: createWorkspace
+      summary: Create a workspace (server owner/admin only; I become its owner)
+      x-permission: workspace.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /workspaces/{wsId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Workspaces]
+      operationId: getWorkspace
+      summary: Get a workspace
+      x-permission: workspace.read
+      responses:
+        '200':
+          description: Workspace
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Workspaces]
+      operationId: updateWorkspace
+      summary: Update a workspace
+      x-permission: workspace.update
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [Workspaces]
+      operationId: deleteWorkspace
+      summary: Delete a workspace and everything in it
+      x-permission: workspace.delete
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+
+  # ───────────────────────── Members ─────────────────────────
+  /workspaces/{wsId}/members:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Members]
+      operationId: listMembers
+      summary: List members
+      x-permission: member.list
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Members]
+      operationId: addMember
+      summary: Add an existing account to this workspace
+      x-permission: member.add
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemberAdd' }
+      responses:
+        '201':
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /workspaces/{wsId}/members/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      tags: [Members]
+      operationId: updateMember
+      summary: Change a member's role or sensitive-info access
+      x-permission: member.update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemberUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Members]
+      operationId: removeMember
+      summary: Remove a member (or leave, when it is yourself)
+      x-permission: member.remove
+      responses:
+        '204': { description: Removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /workspaces/{wsId}/members/{userId}/canvas-grants:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/UserId'
+    put:
+      tags: [Members]
+      operationId: setMemberCanvasGrants
+      summary: Set which canvases an editor may use (replaces the list)
+      x-permission: member.grants_set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CanvasGrants' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  # ───────────────────────── Areas ─────────────────────────
+  /workspaces/{wsId}/areas:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Areas]
+      operationId: listAreas
+      summary: List areas
+      x-permission: area.list
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: parentId
+          in: query
+          description: Only direct children of this area. Use `root` for top-level areas.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Areas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AreaPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Areas]
+      operationId: createArea
+      summary: Create an area
+      description: Editors must include `placeOn` with a canvas granted to them.
+      x-permission: area.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AreaCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Area' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /workspaces/{wsId}/areas/{areaId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - name: areaId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Id' }
+    get:
+      tags: [Areas]
+      operationId: getArea
+      summary: Get an area
+      x-permission: area.read
+      responses:
+        '200':
+          description: Area
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Area' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Areas]
+      operationId: updateArea
+      summary: Update an area (including moving it under another parent)
+      x-permission: area.update
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AreaUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Area' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [Areas]
+      operationId: deleteArea
+      summary: Delete an area (child areas and nodes move to the top level)
+      x-permission: area.delete
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+
+  /workspaces/{wsId}/areas/{areaId}/canvas:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - name: areaId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Id' }
+    get:
+      tags: [Areas]
+      operationId: getAreaCanvasView
+      summary: Enter an area - its inner canvas, ready to draw
+      description: |
+        Double-clicking a collapsed area opens this. The inner canvas is created on first open, with the
+        area's member nodes and child areas pre-placed. Edit it with `applyCanvasOperations` using
+        `canvas.id` from the response. `breadcrumb` lists the path of areas from the top.
+      x-permission: area.canvas
+      responses:
+        '200':
+          description: The area's inner canvas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanvasView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── Nodes ─────────────────────────
+  /workspaces/{wsId}/nodes:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Nodes]
+      operationId: listNodes
+      summary: List nodes in the inventory
+      x-permission: node.list
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: areaId
+          in: query
+          schema: { $ref: '#/components/schemas/Id' }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/NodeCategory' }
+        - name: canvasId
+          in: query
+          description: Only nodes placed on this canvas
+          schema: { $ref: '#/components/schemas/Id' }
+        - name: health
+          in: query
+          schema: { $ref: '#/components/schemas/HealthStatus' }
+        - name: q
+          in: query
+          description: Search name, slug and non-sensitive field values
+          schema: { type: string }
+      responses:
+        '200':
+          description: Nodes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NodePage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Nodes]
+      operationId: createNode
+      summary: Create a node
+      description: Editors must include `placeOn` with a canvas granted to them. `slug` is generated from the name if omitted.
+      x-permission: node.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NodeCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Node' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /workspaces/{wsId}/nodes/{nodeId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/NodeId'
+    get:
+      tags: [Nodes]
+      operationId: getNode
+      summary: Get a node
+      x-permission: node.read
+      responses:
+        '200':
+          description: Node
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Node' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Nodes]
+      operationId: updateNode
+      summary: Update a node (visible on every canvas it is placed on)
+      x-permission: node.update
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NodeUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Node' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [Nodes]
+      operationId: deleteNode
+      summary: Delete a node from the inventory (removes it, its links and notes from every canvas)
+      x-permission: node.delete
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+
+  /workspaces/{wsId}/nodes/{nodeId}/usage:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/NodeId'
+    get:
+      tags: [Nodes]
+      operationId: getNodeUsage
+      summary: Where a node is used (for the delete warning)
+      x-permission: node.usage
+      responses:
+        '200':
+          description: Usage
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NodeUsage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workspaces/{wsId}/nodes/{nodeId}/health:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/NodeId'
+    put:
+      tags: [Nodes]
+      operationId: setNodeHealth
+      summary: Set a node's health manually
+      description: Plugin-driven health arrives in phase C3 and takes precedence when present.
+      x-permission: node.health_set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HealthSet' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Node' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── Links ─────────────────────────
+  /workspaces/{wsId}/links:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Links]
+      operationId: listLinks
+      summary: List links
+      x-permission: link.list
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: nodeId
+          in: query
+          description: Links touching this node (either end)
+          schema: { $ref: '#/components/schemas/Id' }
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/LinkKind' }
+      responses:
+        '200':
+          description: Links
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LinkPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Links]
+      operationId: createLink
+      summary: Create a link between two nodes
+      description: The link appears automatically on every canvas where both nodes are placed (unless that canvas hides it).
+      x-permission: link.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LinkCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /workspaces/{wsId}/links/{linkId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - name: linkId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Id' }
+    get:
+      tags: [Links]
+      operationId: getLink
+      summary: Get a link
+      x-permission: link.read
+      responses:
+        '200':
+          description: Link
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Links]
+      operationId: updateLink
+      summary: Update a link
+      x-permission: link.update
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LinkUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [Links]
+      operationId: deleteLink
+      summary: Delete a link from the inventory (removes it from every canvas)
+      x-permission: link.delete
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+
+  # ───────────────────────── Notes ─────────────────────────
+  /workspaces/{wsId}/notes:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Notes]
+      operationId: listNotes
+      summary: List notes
+      description: Filter by one target. Without a filter, returns workspace-level notes.
+      x-permission: note.list
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - { name: nodeId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: linkId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: areaId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: canvasId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: kind, in: query, schema: { $ref: '#/components/schemas/NoteKind' } }
+      responses:
+        '200':
+          description: Notes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotePage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Notes]
+      operationId: createNote
+      summary: Create a note
+      x-permission: note.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoteCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /workspaces/{wsId}/notes/{noteId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - name: noteId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Id' }
+    get:
+      tags: [Notes]
+      operationId: getNote
+      summary: Get a note
+      x-permission: note.read
+      responses:
+        '200':
+          description: Note
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Notes]
+      operationId: updateNote
+      summary: Update a note
+      x-permission: note.update
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoteUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [Notes]
+      operationId: deleteNote
+      summary: Delete a note
+      x-permission: note.delete
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+
+  # ───────────────────────── Canvases ─────────────────────────
+  /workspaces/{wsId}/canvases:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Canvases]
+      operationId: listCanvases
+      summary: List the tab canvases I can see (area inner canvases are opened through their area)
+      x-permission: canvas.list
+      responses:
+        '200':
+          description: Canvases, ordered by sortOrder
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Canvas' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Canvases]
+      operationId: createCanvas
+      summary: Create a canvas
+      x-permission: canvas.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CanvasCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Canvas' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /workspaces/{wsId}/canvases/{canvasId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/CanvasId'
+    get:
+      tags: [Canvases]
+      operationId: getCanvas
+      summary: Get canvas metadata
+      x-permission: canvas.read
+      responses:
+        '200':
+          description: Canvas
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Canvas' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Canvases]
+      operationId: updateCanvas
+      summary: Update canvas metadata (name, order, settings, default viewport)
+      x-permission: canvas.update
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CanvasUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Canvas' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+    delete:
+      tags: [Canvases]
+      operationId: deleteCanvas
+      summary: Delete a canvas (the inventory is untouched)
+      x-permission: canvas.delete
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+
+  /workspaces/{wsId}/canvases/{canvasId}/view:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/CanvasId'
+    get:
+      tags: [Canvases]
+      operationId: getCanvasView
+      summary: Everything needed to draw a canvas, redacted for the caller
+      x-permission: canvas.view
+      responses:
+        '200':
+          description: Canvas view
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanvasView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workspaces/{wsId}/canvases/{canvasId}/operations:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/CanvasId'
+    post:
+      tags: [Canvases]
+      operationId: applyCanvasOperations
+      summary: Apply a batch of canvas edits atomically
+      description: |
+        Place, move, restyle and remove items, and create/update/delete free shapes.
+        All operations succeed or none do. Used for drag-and-drop, multi-select moves and undo/redo.
+        Other viewers receive the result as SSE events.
+      x-permission: canvas.edit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CanvasOperationBatch' }
+      responses:
+        '200':
+          description: Applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanvasOperationResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '423': { $ref: '#/components/responses/Locked' }
+
+  /workspaces/{wsId}/canvases/{canvasId}/lock:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/CanvasId'
+    post:
+      tags: [Canvases]
+      operationId: lockCanvas
+      summary: Lock a canvas against edits
+      x-permission: canvas.lock
+      responses:
+        '200':
+          description: Locked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Canvas' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Canvases]
+      operationId: unlockCanvas
+      summary: Unlock a canvas
+      x-permission: canvas.unlock
+      responses:
+        '200':
+          description: Unlocked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Canvas' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── Share links ─────────────────────────
+  /workspaces/{wsId}/canvases/{canvasId}/share-links:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - $ref: '#/components/parameters/CanvasId'
+    get:
+      tags: [Share links]
+      operationId: listShareLinks
+      summary: List share links of a canvas
+      x-permission: share_link.list
+      responses:
+        '200':
+          description: Share links
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ShareLink' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Share links]
+      operationId: createShareLink
+      summary: Create a guest link for this canvas
+      description: The token is returned **only once**, in this response. Only its hash is stored.
+      x-permission: share_link.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShareLinkCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShareLinkCreated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /workspaces/{wsId}/share-links/{shareLinkId}:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+      - name: shareLinkId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Id' }
+    patch:
+      tags: [Share links]
+      operationId: updateShareLink
+      summary: Change label, password or expiry
+      x-permission: share_link.update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShareLinkUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShareLink' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Share links]
+      operationId: revokeShareLink
+      summary: Revoke a share link (it stops working immediately)
+      x-permission: share_link.revoke
+      responses:
+        '204': { description: Revoked }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── Guest ─────────────────────────
+  /share/{token}:
+    parameters:
+      - $ref: '#/components/parameters/ShareToken'
+    get:
+      tags: [Guest]
+      operationId: getShareInfo
+      summary: Check a share link before opening it
+      description: Reveals nothing about the canvas until the link is unlocked.
+      x-permission: share.info
+      security: []
+      responses:
+        '200':
+          description: Link status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShareInfo' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /share/{token}/unlock:
+    parameters:
+      - $ref: '#/components/parameters/ShareToken'
+    post:
+      tags: [Guest]
+      operationId: unlockShare
+      summary: Open a share link (with its password, if it has one)
+      x-permission: share.unlock
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShareUnlock' }
+      responses:
+        '204':
+          description: Unlocked; guest cookie set
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/GuestCookie' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /share/{token}/view:
+    parameters:
+      - $ref: '#/components/parameters/ShareToken'
+    get:
+      tags: [Guest]
+      operationId: getSharedCanvasView
+      summary: Read-only view of the shared canvas (guest redaction applied)
+      x-permission: share.view
+      security:
+        - guest: []
+      responses:
+        '200':
+          description: Canvas view for guests
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanvasView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── Events ─────────────────────────
+  /workspaces/{wsId}/events:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Events]
+      operationId: streamEvents
+      summary: Live updates for this workspace (Server-Sent Events)
+      description: |
+        A `text/event-stream`. Each event's `data` is a JSON `Event`. Events are filtered and redacted
+        exactly like normal reads, so a viewer never receives data they could not GET.
+        Reconnect with the standard `Last-Event-ID` header to resume.
+      x-permission: events.stream
+      parameters:
+        - name: canvasId
+          in: query
+          description: Only events relevant to this canvas
+          schema: { $ref: '#/components/schemas/Id' }
+        - name: Last-Event-ID
+          in: header
+          schema: { type: string }
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream; see the Event schema for the payload of each `data:` line.
+              example: |
+                id: 0192f3a0-7c1e-7000-8000-000000000001
+                event: node.updated
+                data: {"type":"node.updated","workspaceId":"…","data":{"id":"…","name":"NPM"}}
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── Audit ─────────────────────────
+  /workspaces/{wsId}/audit-log:
+    parameters:
+      - $ref: '#/components/parameters/WsId'
+    get:
+      tags: [Audit]
+      operationId: listAuditLog
+      summary: Who did what, newest first
+      x-permission: audit.list
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - { name: actorId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: action, in: query, description: 'Exact key or prefix, e.g. `node.` ', schema: { type: string } }
+        - { name: targetId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Audit entries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: netopology_session
+      description: Set by login/setup. HttpOnly, Secure, SameSite=Lax.
+    guest:
+      type: apiKey
+      in: cookie
+      name: netopology_share
+      description: Set by `POST /share/{token}/unlock`. Valid for one share link only.
+
+  headers:
+    ETag:
+      description: Current version of the resource, e.g. `"3"`. Send it back as `If-Match`.
+      schema: { type: string }
+    SessionCookie:
+      description: '`netopology_session=…; HttpOnly; Secure; SameSite=Lax; Path=/`'
+      schema: { type: string }
+    GuestCookie:
+      description: '`netopology_share=…; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/share`'
+      schema: { type: string }
+
+  parameters:
+    WsId:
+      name: wsId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    CanvasId:
+      name: canvasId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/AuthProvider' }
+    ShareToken:
+      name: token
+      in: path
+      required: true
+      description: The secret token from the share URL
+      schema: { type: string, minLength: 32 }
+    Cursor:
+      name: cursor
+      in: query
+      description: '`nextCursor` from the previous page'
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    IfMatch:
+      name: If-Match
+      in: header
+      description: The `ETag` you last read. If it no longer matches, the request fails with 412.
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Not signed in, bad credentials, or bad share-link password
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: You can see this resource but may not do this (e.g. `protected`, `role.insufficient`)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Does not exist, or you are not allowed to know it exists
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Conflicts with current state (e.g. `member.last_owner`, `inventory.used_elsewhere`, `slug.taken`)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PreconditionFailed:
+      description: '`If-Match` is stale: someone else changed it first. Reload and retry.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ValidationFailed:
+      description: The request body or parameters are invalid
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Locked:
+      description: The canvas is locked (`canvas.locked`)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Rate limit hit; see `Retry-After`
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    # ───────── primitives ─────────
+    Id:
+      type: string
+      format: uuid
+      description: UUID v7
+      examples: ['0192f3a0-7c1e-7000-8000-000000000001']
+    Slug:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9-]{0,62}$'
+      examples: ['npm-main']
+    Timestamp:
+      type: string
+      format: date-time
+    Version:
+      type: integer
+      minimum: 1
+      readOnly: true
+    Role:
+      type: string
+      enum: [owner, admin, editor, viewer]
+    ViewerRole:
+      type: string
+      description: The caller's effective role for this response (`guest` for share links)
+      enum: [owner, admin, editor, viewer, guest]
+    HealthStatus:
+      type: string
+      enum: [healthy, degraded, down, unknown]
+    NodeCategory:
+      type: string
+      description: Drives the node's shape on canvases
+      enum: [network, compute, service, storage, external, generic]
+    LinkKind:
+      type: string
+      description: Drives the link's line style
+      enum: [physical, vpn_tunnel, proxy_route, dns_dependency, storage_mount, logical]
+    AreaKind:
+      type: string
+      enum: [site, network, vlan, cloud, custom]
+    AreaColor:
+      type: string
+      description: Background color of the area box (a design token name, not a hex value)
+      enum: [yellow, teal, violet, rose, blue, green, gray]
+      default: yellow
+    NoteKind:
+      type: string
+      enum: [note, rule]
+    NoteColor:
+      type: string
+      enum: [default, yellow, teal, violet, rose]
+    ShapeKind:
+      type: string
+      enum: [text, rectangle, ellipse, line, arrow, freehand]
+    Point:
+      type: object
+      required: [x, y]
+      properties:
+        x: { type: number }
+        y: { type: number }
+    Style:
+      type: object
+      description: Per-canvas visual style. Free-form, validated by the UI's style schema.
+      additionalProperties: true
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details
+      required: [title, status, code]
+      properties:
+        type: { type: string, format: uri, default: 'about:blank' }
+        title: { type: string, examples: ['Forbidden'] }
+        status: { type: integer, examples: [403] }
+        code:
+          type: string
+          description: Stable machine-readable reason
+          examples: [protected, member.last_owner, inventory.used_elsewhere, canvas.locked, slug.taken]
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          description: Field-level validation errors
+          items:
+            type: object
+            required: [message]
+            properties:
+              location: { type: string, examples: ['body.name'] }
+              message: { type: string }
+              value: {}
+
+    Field:
+      type: object
+      description: |
+        A user-defined property. When the caller may not see sensitive data, a sensitive field is returned
+        with `redacted: true` and no `value` (members) or is omitted entirely (guests).
+      required: [key, label]
+      properties:
+        key: { type: string, pattern: '^[a-z][a-z0-9_]{0,39}$', examples: [ip] }
+        label: { type: string, maxLength: 60, examples: ['IP address'] }
+        value: { type: [string, 'null'], maxLength: 2000, examples: ['192.168.1.1'] }
+        sensitive: { type: boolean, default: false }
+        redacted: { type: boolean, readOnly: true }
+    Health:
+      type: object
+      required: [status, source]
+      properties:
+        status: { $ref: '#/components/schemas/HealthStatus' }
+        source: { type: string, enum: [manual, plugin] }
+        message: { type: [string, 'null'], description: Omitted for guests }
+        checkedAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    PlaceOn:
+      type: object
+      description: Also place the new item on this canvas. Required for editors.
+      required: [canvasId]
+      properties:
+        canvasId: { $ref: '#/components/schemas/Id' }
+        parentPlacementId:
+          $ref: '#/components/schemas/Id'
+          description: Draw it inside this area box (must be the box of the item's own area)
+        x: { type: number, default: 0 }
+        y: { type: number, default: 0 }
+        width: { type: number, exclusiveMinimum: 0 }
+        height: { type: number, exclusiveMinimum: 0 }
+        style: { $ref: '#/components/schemas/Style' }
+
+    # ───────── setup, auth, accounts ─────────
+    SetupStatus:
+      type: object
+      required: [needsSetup]
+      properties:
+        needsSetup: { type: boolean }
+    SetupRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { $ref: '#/components/schemas/Username' }
+        password: { $ref: '#/components/schemas/Password' }
+        displayName: { type: string, maxLength: 100 }
+        email: { type: string, format: email }
+        workspaceName:
+          type: string
+          maxLength: 100
+          description: If set, also create this first workspace with you as owner
+    AuthProvider:
+      type: string
+      enum: [google, discord]
+    AuthProviders:
+      type: object
+      required: [password, providers]
+      properties:
+        password: { type: boolean, description: Username + password sign-in is available }
+        providers:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { $ref: '#/components/schemas/AuthProvider' }
+              name: { type: string, examples: [Discord] }
+    Identity:
+      type: object
+      required: [id, provider, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        provider: { $ref: '#/components/schemas/AuthProvider' }
+        email: { type: [string, 'null'] }
+        displayName: { type: [string, 'null'] }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        lastUsedAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    InstanceRole:
+      type: string
+      description: Server-level role. Separate from workspace roles; grants no workspace content access.
+      enum: [owner, admin, member]
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, writeOnly: true }
+        remember:
+          type: boolean
+          default: false
+          description: |
+            `false`: the cookie ends when the browser closes, and the session also expires after
+            `sessionTtlHours` (instance setting, default 168) without activity.
+            `true`: a persistent cookie; the session expires after 30 days without activity
+            (or `sessionTtlHours`, if that is longer). Both lifetimes slide with use.
+    Username:
+      type: string
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{1,38}[A-Za-z0-9]$'
+      examples: [alice]
+    Password:
+      type: string
+      minLength: 12
+      maxLength: 256
+      writeOnly: true
+    User:
+      type: object
+      description: Public profile, as other members see it
+      required: [id, username, displayName]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        username: { $ref: '#/components/schemas/Username' }
+        displayName: { type: string }
+    Account:
+      type: object
+      description: Full account, as the account itself or the server owner/admin sees it
+      required: [id, username, displayName, instanceRole, hasPassword, identities, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        username: { $ref: '#/components/schemas/Username' }
+        displayName: { type: string }
+        email: { type: [string, 'null'], format: email }
+        instanceRole: { $ref: '#/components/schemas/InstanceRole' }
+        hasPassword: { type: boolean }
+        identities:
+          type: array
+          description: Linked sign-in providers
+          items: { $ref: '#/components/schemas/AuthProvider' }
+        status: { type: string, enum: [active, disabled] }
+        lastLoginAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+    Me:
+      $ref: '#/components/schemas/Account'
+    MeUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        displayName: { type: string, maxLength: 100 }
+        email: { type: [string, 'null'], format: email }
+    PasswordChange:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, writeOnly: true }
+        newPassword: { $ref: '#/components/schemas/Password' }
+    PasswordReset:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword: { $ref: '#/components/schemas/Password' }
+    AccountCreate:
+      type: object
+      description: |
+        Give the account a password, an email, or both. With an email, the user's first Google/Discord sign-in
+        whose provider-verified email matches is linked automatically.
+      required: [username]
+      anyOf:
+        - required: [password]
+        - required: [email]
+      properties:
+        username: { $ref: '#/components/schemas/Username' }
+        password: { $ref: '#/components/schemas/Password' }
+        displayName: { type: string, maxLength: 100 }
+        email: { type: string, format: email }
+        instanceRole:
+          type: string
+          enum: [admin, member]
+          default: member
+          description: Only the server owner may create admins
+    AccountUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        displayName: { type: string, maxLength: 100 }
+        email: { type: [string, 'null'], format: email }
+        status: { type: string, enum: [active, disabled] }
+        instanceRole:
+          $ref: '#/components/schemas/InstanceRole'
+          description: Only the server owner may grant admin. Setting `owner` transfers ownership (the current owner becomes admin).
+    AccountPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Account' } }
+        nextCursor: { type: [string, 'null'] }
+    InstanceSettings:
+      type: object
+      description: Google/Discord client credentials are configured through environment variables, not here.
+      properties:
+        sessionTtlHours: { type: integer, minimum: 1, maximum: 8760, default: 168 }
+        oauthAutoLinkByEmail:
+          type: boolean
+          default: true
+          description: Link a first Google/Discord sign-in to an account with the same provider-verified email
+
+    # ───────── workspaces & members ─────────
+    Workspace:
+      type: object
+      required: [id, name, slug, description, isProtected, settings, membership, createdAt, updatedAt, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, maxLength: 100 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        description: { type: string }
+        isProtected: { type: boolean }
+        settings: { type: object, additionalProperties: true }
+        membership:
+          type: object
+          description: The caller's own membership
+          required: [role, canViewSensitive]
+          properties:
+            role: { $ref: '#/components/schemas/Role' }
+            canViewSensitive: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        version: { $ref: '#/components/schemas/Version' }
+    WorkspaceCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        description: { type: string }
+    WorkspaceUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        description: { type: string }
+        isProtected: { type: boolean }
+        settings: { type: object, additionalProperties: true }
+    Member:
+      type: object
+      required: [user, role, canViewSensitive, canvasIds, createdAt]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        role: { $ref: '#/components/schemas/Role' }
+        canViewSensitive:
+          type: boolean
+          description: Always true in effect for owner/admin
+        canvasIds:
+          type: array
+          description: Granted canvases (editors only; empty for other roles)
+          items: { $ref: '#/components/schemas/Id' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+    MemberAdd:
+      type: object
+      required: [userId, role]
+      properties:
+        userId: { $ref: '#/components/schemas/Id' }
+        role: { $ref: '#/components/schemas/Role' }
+        canViewSensitive: { type: boolean, default: false }
+        canvasIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+    MemberUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+        canViewSensitive: { type: boolean }
+    CanvasGrants:
+      type: object
+      required: [canvasIds]
+      properties:
+        canvasIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Id' }
+
+    # ───────── inventory ─────────
+    Area:
+      type: object
+      required: [id, parentId, name, kind, description, properties, createdAt, updatedAt, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        parentId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        name: { type: string, maxLength: 100 }
+        kind: { $ref: '#/components/schemas/AreaKind' }
+        color: { $ref: '#/components/schemas/AreaColor' }
+        nodeCount: { type: integer, readOnly: true, description: Nodes directly in this area }
+        health:
+          $ref: '#/components/schemas/HealthStatus'
+          readOnly: true
+          description: Rolled up from the nodes and areas inside (worst wins)
+        cidr:
+          type: [string, 'null']
+          description: Redacted for callers without sensitive access
+          examples: ['192.168.1.0/24']
+        vlanId: { type: [integer, 'null'], minimum: 1, maximum: 4094 }
+        description: { type: string }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        version: { $ref: '#/components/schemas/Version' }
+    AreaCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        parentId: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/AreaKind' }
+        color: { $ref: '#/components/schemas/AreaColor' }
+        cidr: { type: string }
+        vlanId: { type: integer, minimum: 1, maximum: 4094 }
+        description: { type: string }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+        placeOn: { $ref: '#/components/schemas/PlaceOn' }
+    AreaUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        parentId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        kind: { $ref: '#/components/schemas/AreaKind' }
+        color: { $ref: '#/components/schemas/AreaColor' }
+        cidr: { type: [string, 'null'] }
+        vlanId: { type: [integer, 'null'], minimum: 1, maximum: 4094 }
+        description: { type: string }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+    AreaPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Area' } }
+        nextCursor: { type: [string, 'null'] }
+
+    Node:
+      type: object
+      required: [id, slug, name, category, type, description, areaId, properties, health, isProtected, createdAt, updatedAt, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        slug: { $ref: '#/components/schemas/Slug' }
+        name: { type: string, maxLength: 100 }
+        category: { $ref: '#/components/schemas/NodeCategory' }
+        type:
+          type: string
+          description: '`builtin.*` or `<plugin-id>/<node-type>` (plugins arrive in C3)'
+          examples: [builtin.router]
+        icon: { type: [string, 'null'] }
+        description: { type: string }
+        areaId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+        health: { $ref: '#/components/schemas/Health' }
+        isProtected: { type: boolean }
+        createdBy: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: Omitted for guests }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        version: { $ref: '#/components/schemas/Version' }
+    NodeCreate:
+      type: object
+      required: [name, category]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        category: { $ref: '#/components/schemas/NodeCategory' }
+        type: { type: string, default: builtin.generic }
+        icon: { type: string }
+        description: { type: string }
+        areaId: { $ref: '#/components/schemas/Id' }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+        isProtected: { type: boolean, default: false }
+        placeOn: { $ref: '#/components/schemas/PlaceOn' }
+    NodeUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        category: { $ref: '#/components/schemas/NodeCategory' }
+        type: { type: string }
+        icon: { type: [string, 'null'] }
+        description: { type: string }
+        areaId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        properties:
+          type: array
+          description: Replaces the whole list. Redacted fields sent back unchanged keep their stored value.
+          items: { $ref: '#/components/schemas/Field' }
+        isProtected: { type: boolean }
+    NodePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Node' } }
+        nextCursor: { type: [string, 'null'] }
+    NodeUsage:
+      type: object
+      required: [canvases, hiddenCanvasCount, linkCount, noteCount]
+      properties:
+        canvases:
+          type: array
+          description: Canvases you can see that place this node
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { $ref: '#/components/schemas/Id' }
+              name: { type: string }
+        hiddenCanvasCount:
+          type: integer
+          description: Canvases that place this node but you cannot see (editors)
+        linkCount: { type: integer }
+        noteCount: { type: integer }
+    HealthSet:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/HealthStatus' }
+        message: { type: string, maxLength: 500 }
+
+    Link:
+      type: object
+      required: [id, sourceNodeId, targetNodeId, kind, directed, label, properties, health, createdAt, updatedAt, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        sourceNodeId: { $ref: '#/components/schemas/Id' }
+        targetNodeId: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/LinkKind' }
+        directed: { type: boolean }
+        label: { type: string }
+        sourcePort: { type: [string, 'null'], examples: [eth0] }
+        targetPort: { type: [string, 'null'], examples: ['443'] }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+        health: { $ref: '#/components/schemas/Health' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        version: { $ref: '#/components/schemas/Version' }
+    LinkCreate:
+      type: object
+      required: [sourceNodeId, targetNodeId, kind]
+      properties:
+        sourceNodeId: { $ref: '#/components/schemas/Id' }
+        targetNodeId: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/LinkKind' }
+        directed: { type: boolean, default: false }
+        label: { type: string }
+        sourcePort: { type: string }
+        targetPort: { type: string }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+    LinkUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        kind: { $ref: '#/components/schemas/LinkKind' }
+        directed: { type: boolean }
+        label: { type: string }
+        sourcePort: { type: [string, 'null'] }
+        targetPort: { type: [string, 'null'] }
+        properties: { type: array, items: { $ref: '#/components/schemas/Field' } }
+    LinkPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Link' } }
+        nextCursor: { type: [string, 'null'] }
+
+    NoteTarget:
+      type: object
+      description: What the note is attached to. `workspace` means a workspace-level note (no id).
+      required: [type]
+      properties:
+        type: { type: string, enum: [node, link, area, canvas, workspace] }
+        id: { $ref: '#/components/schemas/Id' }
+    Note:
+      type: object
+      required: [id, target, kind, title, body, isSensitive, color, createdAt, updatedAt, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        target: { $ref: '#/components/schemas/NoteTarget' }
+        kind: { $ref: '#/components/schemas/NoteKind' }
+        title: { type: string, maxLength: 200 }
+        body: { type: string, description: Markdown }
+        isSensitive: { type: boolean }
+        redacted:
+          type: boolean
+          readOnly: true
+          description: True when the note is sensitive and you may not read it (title and body are empty)
+        color: { $ref: '#/components/schemas/NoteColor' }
+        createdBy: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        updatedBy: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        version: { $ref: '#/components/schemas/Version' }
+    NoteCreate:
+      type: object
+      required: [target, body]
+      properties:
+        target: { $ref: '#/components/schemas/NoteTarget' }
+        kind: { $ref: '#/components/schemas/NoteKind' }
+        title: { type: string, maxLength: 200 }
+        body: { type: string }
+        isSensitive: { type: boolean, default: false }
+        color: { $ref: '#/components/schemas/NoteColor' }
+        placeOn: { $ref: '#/components/schemas/PlaceOn' }
+    NoteUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        kind: { $ref: '#/components/schemas/NoteKind' }
+        title: { type: string, maxLength: 200 }
+        body: { type: string }
+        isSensitive: { type: boolean }
+        color: { $ref: '#/components/schemas/NoteColor' }
+    NotePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Note' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ───────── canvases ─────────
+    Viewport:
+      type: object
+      required: [x, y, zoom]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        zoom: { type: number, exclusiveMinimum: 0, maximum: 8 }
+    Canvas:
+      type: object
+      required: [id, kind, areaId, name, description, sortOrder, viewport, settings, isProtected, lock, createdAt, updatedAt, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        kind:
+          type: string
+          enum: [tab, area]
+          description: '`tab` = a normal canvas shown as a tab; `area` = the inner canvas of an area'
+        areaId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        name: { type: string, maxLength: 100 }
+        description: { type: string }
+        sortOrder: { type: integer }
+        viewport: { $ref: '#/components/schemas/Viewport' }
+        settings: { $ref: '#/components/schemas/CanvasSettings' }
+        isProtected: { type: boolean }
+        lock:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [userId, lockedAt]
+              properties:
+                userId: { $ref: '#/components/schemas/Id' }
+                lockedAt: { $ref: '#/components/schemas/Timestamp' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        version: { $ref: '#/components/schemas/Version' }
+    CanvasSettings:
+      type: object
+      additionalProperties: true
+      properties:
+        grid: { type: boolean, default: true }
+        snap: { type: integer, minimum: 0, default: 16 }
+        showHealth: { type: boolean, default: true }
+        hiddenLinkKinds:
+          type: array
+          description: Link kinds not drawn on this canvas, e.g. hide `physical` on a services view
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/LinkKind' }
+    CanvasCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string }
+        sortOrder: { type: integer }
+        settings: { $ref: '#/components/schemas/CanvasSettings' }
+        isProtected: { type: boolean, default: false }
+    CanvasUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string }
+        sortOrder: { type: integer }
+        viewport: { $ref: '#/components/schemas/Viewport' }
+        settings: { $ref: '#/components/schemas/CanvasSettings' }
+        isProtected: { type: boolean }
+    ItemRef:
+      type: object
+      description: An item that can be placed on a canvas (links are not placed; they appear automatically)
+      required: [type, id]
+      properties:
+        type: { type: string, enum: [node, area, note] }
+        id: { $ref: '#/components/schemas/Id' }
+    Placement:
+      type: object
+      description: Where a node, area box or note is drawn on this canvas
+      required: [id, item, parentPlacementId, x, y, zIndex, style]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        item: { $ref: '#/components/schemas/ItemRef' }
+        parentPlacementId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: The area box this is drawn inside; x/y are then relative to that box
+        x: { type: number }
+        y: { type: number }
+        width: { type: [number, 'null'] }
+        height: { type: [number, 'null'] }
+        zIndex: { type: integer }
+        collapsed:
+          type: boolean
+          description: Area boxes only. Collapsed = one block; double-click to enter the area
+        style: { $ref: '#/components/schemas/Style' }
+    LinkOverride:
+      type: object
+      description: How this canvas changes the default drawing of one link
+      required: [linkId, hidden, style]
+      properties:
+        linkId: { $ref: '#/components/schemas/Id' }
+        hidden: { type: boolean }
+        style: { $ref: '#/components/schemas/Style' }
+        waypoints:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Point' }
+    BreadcrumbItem:
+      type: object
+      required: [name, canvasId]
+      properties:
+        areaId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: Null for the starting tab canvas
+        name: { type: string }
+        canvasId: { $ref: '#/components/schemas/Id' }
+    Shape:
+      type: object
+      required: [id, kind, x, y, rotation, zIndex, style, data]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/ShapeKind' }
+        x: { type: number }
+        y: { type: number }
+        width: { type: [number, 'null'] }
+        height: { type: [number, 'null'] }
+        rotation: { type: number }
+        zIndex: { type: integer }
+        style: { $ref: '#/components/schemas/Style' }
+        data:
+          type: object
+          additionalProperties: true
+          description: 'Text content, points for lines/freehand, etc.'
+    CanvasView:
+      type: object
+      description: |
+        Everything needed to render one canvas, already redacted for the caller.
+        Contains only inventory items placed on this canvas (plus areas referenced by placed nodes).
+        `links` holds exactly the links to draw: those whose two nodes are both placed here, minus hidden ones.
+        For an **area canvas**, links that cross the area boundary are included too; their outside node is in
+        `nodes` but has no placement, and the UI draws it as an "outside" marker.
+        Placement `x`/`y` are the item's **top-left** corner (relative to the parent box when `parentPlacementId` is set).
+      required: [canvas, viewer, breadcrumb, placements, linkOverrides, nodes, links, areas, notes, shapes]
+      properties:
+        canvas: { $ref: '#/components/schemas/Canvas' }
+        breadcrumb:
+          type: array
+          description: For area canvases, the path of areas entered so far (outermost first). Empty for tabs.
+          items: { $ref: '#/components/schemas/BreadcrumbItem' }
+        linkOverrides:
+          type: array
+          description: Per-canvas link styling/routing (hidden links are already removed from `links`)
+          items: { $ref: '#/components/schemas/LinkOverride' }
+        viewer:
+          type: object
+          required: [role, canEdit, canViewSensitive]
+          properties:
+            role: { $ref: '#/components/schemas/ViewerRole' }
+            canEdit: { type: boolean }
+            canViewSensitive: { type: boolean }
+        placements: { type: array, items: { $ref: '#/components/schemas/Placement' } }
+        nodes: { type: array, items: { $ref: '#/components/schemas/Node' } }
+        links: { type: array, items: { $ref: '#/components/schemas/Link' } }
+        areas: { type: array, items: { $ref: '#/components/schemas/Area' } }
+        notes: { type: array, items: { $ref: '#/components/schemas/Note' } }
+        shapes: { type: array, items: { $ref: '#/components/schemas/Shape' } }
+
+    CanvasOperationBatch:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: '#/components/schemas/CanvasOperation' }
+    CanvasOperation:
+      oneOf:
+        - $ref: '#/components/schemas/OpPlace'
+        - $ref: '#/components/schemas/OpUpdatePlacement'
+        - $ref: '#/components/schemas/OpRemovePlacement'
+        - $ref: '#/components/schemas/OpCreateShape'
+        - $ref: '#/components/schemas/OpUpdateShape'
+        - $ref: '#/components/schemas/OpDeleteShape'
+        - $ref: '#/components/schemas/OpLinkOverride'
+        - $ref: '#/components/schemas/OpLinkReset'
+      discriminator:
+        propertyName: op
+        mapping:
+          place: '#/components/schemas/OpPlace'
+          update: '#/components/schemas/OpUpdatePlacement'
+          remove: '#/components/schemas/OpRemovePlacement'
+          shape.create: '#/components/schemas/OpCreateShape'
+          shape.update: '#/components/schemas/OpUpdateShape'
+          shape.delete: '#/components/schemas/OpDeleteShape'
+          link.override: '#/components/schemas/OpLinkOverride'
+          link.reset: '#/components/schemas/OpLinkReset'
+    OpPlace:
+      type: object
+      description: |
+        Show an existing node, area or note on this canvas. Links between placed nodes then appear by themselves.
+        Placing an area box adopts its member nodes already on this canvas (they move inside the box).
+      required: [op, item]
+      properties:
+        op: { const: place }
+        clientId: { type: string, description: Echoed back so the client can map its temporary id }
+        item: { $ref: '#/components/schemas/ItemRef' }
+        parentPlacementId:
+          $ref: '#/components/schemas/Id'
+          description: Draw inside this area box (must be the box of the item's own area)
+        x: { type: number, default: 0 }
+        y: { type: number, default: 0 }
+        width: { type: number, exclusiveMinimum: 0 }
+        height: { type: number, exclusiveMinimum: 0 }
+        zIndex: { type: integer }
+        collapsed: { type: boolean, default: false, description: Area boxes only }
+        style: { $ref: '#/components/schemas/Style' }
+    OpUpdatePlacement:
+      type: object
+      description: |
+        Move, resize, restyle, collapse/expand an area box, or move an item into/out of an area box.
+        Dropping a node into a different area's box also changes the node's area in the inventory
+        (it then moves into that area's box on every canvas).
+      required: [op, placementId]
+      properties:
+        op: { const: update }
+        placementId: { $ref: '#/components/schemas/Id' }
+        parentPlacementId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        x: { type: number }
+        y: { type: number }
+        width: { type: [number, 'null'] }
+        height: { type: [number, 'null'] }
+        zIndex: { type: integer }
+        collapsed: { type: boolean }
+        style: { $ref: '#/components/schemas/Style' }
+    OpLinkOverride:
+      type: object
+      description: Hide, restyle or route one link on this canvas only (creates or updates the override)
+      required: [op, linkId]
+      properties:
+        op: { const: link.override }
+        linkId: { $ref: '#/components/schemas/Id' }
+        hidden: { type: boolean }
+        style: { $ref: '#/components/schemas/Style' }
+        waypoints: { type: [array, 'null'], items: { $ref: '#/components/schemas/Point' } }
+    OpLinkReset:
+      type: object
+      description: Remove this canvas's override for a link (it is drawn with defaults again)
+      required: [op, linkId]
+      properties:
+        op: { const: link.reset }
+        linkId: { $ref: '#/components/schemas/Id' }
+    OpRemovePlacement:
+      type: object
+      description: Remove from this canvas only (the inventory item stays)
+      required: [op, placementId]
+      properties:
+        op: { const: remove }
+        placementId: { $ref: '#/components/schemas/Id' }
+    OpCreateShape:
+      type: object
+      required: [op, kind]
+      properties:
+        op: { const: shape.create }
+        clientId: { type: string }
+        kind: { $ref: '#/components/schemas/ShapeKind' }
+        x: { type: number, default: 0 }
+        y: { type: number, default: 0 }
+        width: { type: number }
+        height: { type: number }
+        rotation: { type: number, default: 0 }
+        zIndex: { type: integer }
+        style: { $ref: '#/components/schemas/Style' }
+        data: { type: object, additionalProperties: true }
+    OpUpdateShape:
+      type: object
+      required: [op, shapeId]
+      properties:
+        op: { const: shape.update }
+        shapeId: { $ref: '#/components/schemas/Id' }
+        x: { type: number }
+        y: { type: number }
+        width: { type: [number, 'null'] }
+        height: { type: [number, 'null'] }
+        rotation: { type: number }
+        zIndex: { type: integer }
+        style: { $ref: '#/components/schemas/Style' }
+        data: { type: object, additionalProperties: true }
+    OpDeleteShape:
+      type: object
+      required: [op, shapeId]
+      properties:
+        op: { const: shape.delete }
+        shapeId: { $ref: '#/components/schemas/Id' }
+    CanvasOperationResult:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          description: One entry per operation, in order
+          items:
+            type: object
+            required: [index]
+            properties:
+              index: { type: integer }
+              clientId: { type: string }
+              id:
+                $ref: '#/components/schemas/Id'
+                description: Id of the created placement or shape
+              removedPlacementIds:
+                type: array
+                description: Extra placements removed as a consequence (e.g. link overrides when a node is removed)
+                items: { $ref: '#/components/schemas/Id' }
+        view:
+          $ref: '#/components/schemas/CanvasView'
+          description: The canvas after the batch, so the client can reconcile (links may have appeared or vanished)
+
+    # ───────── sharing ─────────
+    ShareLink:
+      type: object
+      required: [id, canvasId, label, hasPassword, createdAt, useCount]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        canvasId: { $ref: '#/components/schemas/Id' }
+        label: { type: string, maxLength: 100 }
+        hasPassword: { type: boolean }
+        expiresAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        revokedAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        createdBy: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        lastUsedAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        useCount: { type: integer }
+    ShareLinkCreate:
+      type: object
+      properties:
+        label: { type: string, maxLength: 100 }
+        password: { type: string, minLength: 8, maxLength: 256, writeOnly: true }
+        expiresAt: { $ref: '#/components/schemas/Timestamp' }
+    ShareLinkCreated:
+      type: object
+      required: [shareLink, token, url]
+      properties:
+        shareLink: { $ref: '#/components/schemas/ShareLink' }
+        token:
+          type: string
+          description: Shown only once. Store it or copy the URL now.
+        url:
+          type: string
+          format: uri
+          examples: ['https://netopology.local/share/9f2c…']
+    ShareLinkUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        label: { type: string, maxLength: 100 }
+        password:
+          type: [string, 'null']
+          minLength: 8
+          writeOnly: true
+          description: '`null` removes the password'
+        expiresAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    ShareInfo:
+      type: object
+      required: [requiresPassword]
+      properties:
+        requiresPassword: { type: boolean }
+    ShareUnlock:
+      type: object
+      properties:
+        password: { type: string, writeOnly: true }
+
+    # ───────── events & audit ─────────
+    Event:
+      type: object
+      description: Payload of one SSE message
+      required: [id, type, workspaceId, occurredAt, data]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        type:
+          type: string
+          enum:
+            - node.created
+            - node.updated
+            - node.deleted
+            - link.created
+            - link.updated
+            - link.deleted
+            - area.created
+            - area.updated
+            - area.deleted
+            - note.created
+            - note.updated
+            - note.deleted
+            - canvas.created
+            - canvas.updated
+            - canvas.deleted
+            - canvas.operations_applied
+            - health.changed
+            - member.changed
+        workspaceId: { $ref: '#/components/schemas/Id' }
+        canvasId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        actorId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        occurredAt: { $ref: '#/components/schemas/Timestamp' }
+        data:
+          type: object
+          additionalProperties: true
+          description: The changed resource (redacted for the receiver) or `{ id }` for deletions
+    AuditEntry:
+      type: object
+      required: [id, actor, action, metadata, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        actor:
+          type: object
+          required: [type]
+          properties:
+            type: { type: string, enum: [user, share_link, system, workflow] }
+            id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+            displayName: { type: [string, 'null'] }
+        action:
+          type: string
+          description: The permission key that was exercised
+          examples: [node.delete]
+        target:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [type, id]
+              properties:
+                type: { type: string }
+                id: { $ref: '#/components/schemas/Id' }
+        metadata: { type: object, additionalProperties: true }
+        ip: { type: [string, 'null'] }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+    AuditPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } }
+        nextCursor: { type: [string, 'null'] }

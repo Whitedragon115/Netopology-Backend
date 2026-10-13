@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      CGO_ENABLED: "0"
+      # integration tests create throwaway databases through this superuser
+      NETOPOLOGY_TEST_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: Generated code is up to date
+        run: |
+          go tool task gen
+          git diff --exit-code -- internal/platform/pg/dbgen api/openapi.gen.yaml
+      - name: Lint
+        run: go tool task lint
+      - name: Test
+        run: go test ./...
+      - name: Docker image builds
+        run: docker build -t netopology-backend:ci .
