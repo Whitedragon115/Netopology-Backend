@@ -20,7 +20,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | 11 | Live events (SSE) | 08 (10 for canvas events) | ✅ done |
 | 12 | Share links and guests | 10 | ✅ done |
 | 13 | Audit log listing | 06 | ✅ done |
-| 14 | Permission matrix sweep, strict contract | 03–13 | ⏳ |
+| 14 | Permission matrix sweep, strict contract | 03–13 | ✅ done; generated-schema follow-up DRA-72 |
 | 15 | Frontend on the real API (parent repo) | 10 (12 for sharing) | ⏳ |
 
 Parallel lanes after WP-03: **A** 04 → 05 · **B** 06 → 07 → 08 → 09 → 10 → 12 · **C** 13 (after 06) · **D** 11 (after 08).

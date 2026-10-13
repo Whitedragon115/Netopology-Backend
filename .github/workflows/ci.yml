@@ -19,6 +19,7 @@ jobs:
           --health-interval 2s --health-timeout 3s --health-retries 30
     env:
       CGO_ENABLED: "0"
+      CONTRACT_STRICT: "1"
       # integration tests create throwaway databases through this superuser
       NETOPOLOGY_TEST_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
