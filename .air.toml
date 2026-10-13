@@ -3,8 +3,8 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-  cmd = "go build -o ./tmp/netopology ./cmd/netopology"
-  entrypoint = ["./tmp/netopology", "api"]
+  cmd = "go build -o ./tmp/netopology.exe ./cmd/netopology"
+  entrypoint = ["./tmp/netopology.exe", "api"]
   include_ext = ["go", "sql"]
   exclude_dir = ["tmp", "bin", "tools", "api", "docs", "sandbox"]
   exclude_regex = ["_test\\.go$"]
