@@ -301,6 +301,93 @@ components:
         - password
         - providers
       type: object
+    BreadcrumbItem:
+      additionalProperties: false
+      properties:
+        areaId:
+          type: string
+        canvasId:
+          type: string
+        name:
+          type: string
+      required:
+        - areaId
+        - name
+        - canvasId
+      type: object
+    Canvas:
+      additionalProperties: false
+      properties:
+        areaId:
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+        isProtected:
+          type: boolean
+        kind:
+          enum:
+            - tab
+            - area
+          type: string
+        lock:
+          $ref: "#/components/schemas/CanvasLock"
+        name:
+          maxLength: 100
+          type: string
+        settings:
+          additionalProperties: {}
+          type: object
+        sortOrder:
+          format: int32
+          type: integer
+        updatedAt:
+          format: date-time
+          type: string
+        version:
+          format: int32
+          type: integer
+        viewport:
+          $ref: "#/components/schemas/CanvasViewport"
+      required:
+        - id
+        - kind
+        - areaId
+        - name
+        - description
+        - sortOrder
+        - viewport
+        - settings
+        - isProtected
+        - lock
+        - createdAt
+        - updatedAt
+        - version
+      type: object
+    CanvasCreate:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        isProtected:
+          type: boolean
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+        settings:
+          additionalProperties: {}
+          type: object
+        sortOrder:
+          format: int32
+          type: integer
+      required:
+        - name
+      type: object
     CanvasGrants:
       additionalProperties: false
       properties:
@@ -310,6 +397,220 @@ components:
           type: array
       required:
         - canvasIds
+      type: object
+    CanvasLock:
+      additionalProperties: false
+      properties:
+        lockedAt:
+          format: date-time
+          type: string
+        userId:
+          type: string
+      required:
+        - userId
+        - lockedAt
+      type: object
+    CanvasOperation:
+      additionalProperties: false
+      properties:
+        clientId:
+          type: string
+        collapsed:
+          type: boolean
+        data:
+          additionalProperties: {}
+          type: object
+        height:
+          format: double
+          type: number
+        hidden:
+          type: boolean
+        item:
+          $ref: "#/components/schemas/ItemRef"
+        kind:
+          type: string
+        linkId:
+          type: string
+        op:
+          enum:
+            - place
+            - update
+            - remove
+            - shape.create
+            - shape.update
+            - shape.delete
+            - link.override
+            - link.reset
+          type: string
+        parentPlacementId:
+          type: string
+        placementId:
+          type: string
+        rotation:
+          format: double
+          type: number
+        shapeId:
+          type: string
+        style:
+          additionalProperties: {}
+          type: object
+        waypoints:
+          items:
+            $ref: "#/components/schemas/Point"
+          type: array
+        width:
+          format: double
+          type: number
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+        zIndex:
+          format: int32
+          type: integer
+      required:
+        - op
+      type: object
+    CanvasOperationBatch:
+      additionalProperties: false
+      properties:
+        operations:
+          items:
+            $ref: "#/components/schemas/CanvasOperation"
+          maxItems: 500
+          minItems: 1
+          type: array
+      required:
+        - operations
+      type: object
+    CanvasOperationResult:
+      additionalProperties: false
+      properties:
+        results:
+          items:
+            $ref: "#/components/schemas/CanvasOperationResultItem"
+          type: array
+        view:
+          $ref: "#/components/schemas/CanvasView"
+      required:
+        - results
+      type: object
+    CanvasOperationResultItem:
+      additionalProperties: false
+      properties:
+        clientId:
+          type: string
+        id:
+          type: string
+        index:
+          format: int64
+          type: integer
+        removedPlacementIds:
+          items:
+            type: string
+          type: array
+      required:
+        - index
+      type: object
+    CanvasPage:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Canvas"
+          type: array
+      required:
+        - items
+      type: object
+    CanvasUpdate:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        isProtected:
+          type: boolean
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+        settings:
+          additionalProperties: {}
+          type: object
+        sortOrder:
+          format: int32
+          type: integer
+        viewport:
+          $ref: "#/components/schemas/CanvasViewport"
+      type: object
+    CanvasView:
+      additionalProperties: false
+      properties:
+        areas:
+          items:
+            $ref: "#/components/schemas/Area"
+          type: array
+        breadcrumb:
+          items:
+            $ref: "#/components/schemas/BreadcrumbItem"
+          type: array
+        canvas:
+          $ref: "#/components/schemas/Canvas"
+        linkOverrides:
+          items:
+            $ref: "#/components/schemas/LinkOverride"
+          type: array
+        links:
+          items:
+            $ref: "#/components/schemas/Link"
+          type: array
+        nodes:
+          items:
+            $ref: "#/components/schemas/Node"
+          type: array
+        notes:
+          items:
+            $ref: "#/components/schemas/Note"
+          type: array
+        placements:
+          items:
+            $ref: "#/components/schemas/Placement"
+          type: array
+        shapes:
+          items:
+            $ref: "#/components/schemas/Shape"
+          type: array
+        viewer:
+          $ref: "#/components/schemas/Viewer"
+      required:
+        - canvas
+        - viewer
+        - breadcrumb
+        - placements
+        - linkOverrides
+        - nodes
+        - links
+        - areas
+        - notes
+        - shapes
+      type: object
+    CanvasViewport:
+      additionalProperties: false
+      properties:
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+        zoom:
+          format: double
+          type: number
+      required:
+        - x
+        - "y"
+        - zoom
       type: object
     Field:
       additionalProperties: false
@@ -420,6 +721,21 @@ components:
             - integer
             - "null"
       type: object
+    ItemRef:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          enum:
+            - node
+            - area
+            - note
+          type: string
+      required:
+        - type
+        - id
+      type: object
     Link:
       additionalProperties: false
       properties:
@@ -511,6 +827,25 @@ components:
         - sourceNodeId
         - targetNodeId
         - kind
+      type: object
+    LinkOverride:
+      additionalProperties: false
+      properties:
+        hidden:
+          type: boolean
+        linkId:
+          type: string
+        style:
+          additionalProperties: {}
+          type: object
+        waypoints:
+          items:
+            $ref: "#/components/schemas/Point"
+          type: array
+      required:
+        - linkId
+        - hidden
+        - style
       type: object
     LinkPage:
       additionalProperties: false
@@ -1057,6 +1392,57 @@ components:
       required:
         - canvasId
       type: object
+    Placement:
+      additionalProperties: false
+      properties:
+        collapsed:
+          type: boolean
+        height:
+          format: double
+          type: number
+        id:
+          type: string
+        item:
+          $ref: "#/components/schemas/ItemRef"
+        parentPlacementId:
+          type: string
+        style:
+          additionalProperties: {}
+          type: object
+        width:
+          format: double
+          type: number
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+        zIndex:
+          format: int32
+          type: integer
+      required:
+        - id
+        - item
+        - parentPlacementId
+        - x
+        - "y"
+        - zIndex
+        - style
+      type: object
+    Point:
+      additionalProperties: false
+      properties:
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+      required:
+        - x
+        - "y"
+      type: object
     Problem:
       additionalProperties: false
       properties:
@@ -1161,6 +1547,47 @@ components:
       required:
         - needsSetup
       type: object
+    Shape:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties: {}
+          type: object
+        height:
+          format: double
+          type: number
+        id:
+          type: string
+        kind:
+          type: string
+        rotation:
+          format: double
+          type: number
+        style:
+          additionalProperties: {}
+          type: object
+        width:
+          format: double
+          type: number
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+        zIndex:
+          format: int32
+          type: integer
+      required:
+        - id
+        - kind
+        - x
+        - "y"
+        - rotation
+        - zIndex
+        - style
+        - data
+      type: object
     User:
       additionalProperties: false
       properties:
@@ -1176,6 +1603,20 @@ components:
         - id
         - username
         - displayName
+      type: object
+    Viewer:
+      additionalProperties: false
+      properties:
+        canEdit:
+          type: boolean
+        canViewSensitive:
+          type: boolean
+        role:
+          type: string
+      required:
+        - role
+        - canEdit
+        - canViewSensitive
       type: object
     Workspace:
       additionalProperties: false
@@ -2628,6 +3069,533 @@ paths:
       tags:
         - Areas
       x-permission: area.update
+  /workspaces/{wsId}/areas/{areaId}/canvas:
+    get:
+      description: Double-clicking a collapsed area opens this. The inner canvas is created on first open, with the area's member nodes and child areas pre-placed. Edit it with `applyCanvasOperations` using `canvas.id` from the response. `breadcrumb` lists the path of areas from the top.
+      operationId: getAreaCanvasView
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: areaId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvasView"
+          description: OK
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Enter an area - its inner canvas, ready to draw
+      tags:
+        - Areas
+      x-permission: area.canvas
+  /workspaces/{wsId}/canvases:
+    get:
+      operationId: listCanvases
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvasPage"
+          description: OK
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: List the tab canvases I can see (area inner canvases are opened through their area)
+      tags:
+        - Canvases
+      x-permission: canvas.list
+    post:
+      operationId: createCanvas
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CanvasCreate"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Canvas"
+          description: Created
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: CanvasCreate a canvas
+      tags:
+        - Canvases
+      x-permission: canvas.create
+  /workspaces/{wsId}/canvases/{canvasId}:
+    delete:
+      operationId: deleteCanvas
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: canvasId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Delete a canvas (the inventory is untouched)
+      tags:
+        - Canvases
+      x-permission: canvas.delete
+    get:
+      operationId: getCanvas
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: canvasId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Canvas"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Get canvas metadata
+      tags:
+        - Canvases
+      x-permission: canvas.read
+    patch:
+      operationId: updateCanvas
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: canvasId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CanvasUpdate"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Canvas"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: CanvasUpdate canvas metadata (name, order, settings, default viewport)
+      tags:
+        - Canvases
+      x-permission: canvas.update
+  /workspaces/{wsId}/canvases/{canvasId}/lock:
+    delete:
+      operationId: unlockCanvas
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: canvasId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Canvas"
+          description: OK
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Unlock a canvas
+      tags:
+        - Canvases
+      x-permission: canvas.unlock
+    post:
+      operationId: lockCanvas
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: canvasId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Canvas"
+          description: OK
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Lock a canvas against edits
+      tags:
+        - Canvases
+      x-permission: canvas.lock
+  /workspaces/{wsId}/canvases/{canvasId}/operations:
+    post:
+      description: |-
+        Place, move, restyle and remove items, and create/update/delete free shapes.
+        All operations succeed or none do. Used for drag-and-drop, multi-select moves and undo/redo.
+        Other viewers receive the result as SSE events.
+      operationId: applyCanvasOperations
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: canvasId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CanvasOperationBatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvasOperationResult"
+          description: OK
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "423":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Locked
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Apply a batch of canvas edits atomically
+      tags:
+        - Canvases
+      x-permission: canvas.edit
+  /workspaces/{wsId}/canvases/{canvasId}/view:
+    get:
+      operationId: getCanvasView
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: canvasId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvasView"
+          description: OK
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Everything needed to draw a canvas, redacted for the caller
+      tags:
+        - Canvases
+      x-permission: canvas.view
   /workspaces/{wsId}/links:
     get:
       operationId: listLinks

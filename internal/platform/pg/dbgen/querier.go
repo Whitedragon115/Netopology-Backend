@@ -12,7 +12,11 @@ import (
 )
 
 type Querier interface {
+	AdoptAreaNodes(ctx context.Context, arg AdoptAreaNodesParams) error
 	AreaExists(ctx context.Context, arg AreaExistsParams) (bool, error)
+	CanvasHasNode(ctx context.Context, arg CanvasHasNodeParams) (bool, error)
+	CanvasItemExists(ctx context.Context, arg CanvasItemExistsParams) (bool, error)
+	CanvasLinkEndpoints(ctx context.Context, arg CanvasLinkEndpointsParams) (CanvasLinkEndpointsRow, error)
 	CountNodeLinks(ctx context.Context, arg CountNodeLinksParams) (int64, error)
 	CountNodeNotes(ctx context.Context, arg CountNodeNotesParams) (int64, error)
 	CountTabCanvases(ctx context.Context, arg CountTabCanvasesParams) (int64, error)
@@ -26,19 +30,32 @@ type Querier interface {
 	// workspaces and workspace_members have no RLS: the service checks membership first.
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	DeleteAreaInventory(ctx context.Context, arg DeleteAreaInventoryParams) (int64, error)
+	DeleteCanvasLinkOverride(ctx context.Context, arg DeleteCanvasLinkOverrideParams) (int64, error)
+	DeleteCanvasPlacement(ctx context.Context, arg DeleteCanvasPlacementParams) (int64, error)
+	DeleteCanvasRow(ctx context.Context, arg DeleteCanvasRowParams) (int64, error)
+	DeleteCanvasShape(ctx context.Context, arg DeleteCanvasShapeParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
 	DeleteLinkInventory(ctx context.Context, arg DeleteLinkInventoryParams) (int64, error)
 	DeleteMember(ctx context.Context, arg DeleteMemberParams) (int64, error)
 	DeleteNodeInventory(ctx context.Context, arg DeleteNodeInventoryParams) (int64, error)
 	DeleteNoteInventory(ctx context.Context, arg DeleteNoteInventoryParams) (int64, error)
+	DeleteOrphanLinkOverrides(ctx context.Context, arg DeleteOrphanLinkOverridesParams) ([]uuid.UUID, error)
 	DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) (int64, error)
 	DeleteSession(ctx context.Context, id uuid.UUID) error
 	// Password reset, account disabled: end every session of that user.
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error)
 	DemoteInstanceOwner(ctx context.Context, id uuid.UUID) error
+	EnsureAreaCanvas(ctx context.Context, arg EnsureAreaCanvasParams) (int64, error)
+	FindAreaStartingTab(ctx context.Context, arg FindAreaStartingTabParams) (FindAreaStartingTabRow, error)
 	GetActiveUserByEmail(ctx context.Context, email string) (User, error)
+	GetAreaCanvasRow(ctx context.Context, arg GetAreaCanvasRowParams) (Canvase, error)
 	GetAreaVisible(ctx context.Context, arg GetAreaVisibleParams) (GetAreaVisibleRow, error)
+	GetCanvasLinkOverride(ctx context.Context, arg GetCanvasLinkOverrideParams) (Placement, error)
+	GetCanvasParentArea(ctx context.Context, arg GetCanvasParentAreaParams) (*uuid.UUID, error)
+	GetCanvasPlacement(ctx context.Context, arg GetCanvasPlacementParams) (Placement, error)
+	GetCanvasRow(ctx context.Context, arg GetCanvasRowParams) (Canvase, error)
+	GetCanvasShape(ctx context.Context, arg GetCanvasShapeParams) (CanvasShape, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (UserIdentity, error)
 	GetIdentityForUser(ctx context.Context, arg GetIdentityForUserParams) (UserIdentity, error)
 	GetIdentityForUserProvider(ctx context.Context, arg GetIdentityForUserProviderParams) (UserIdentity, error)
@@ -69,11 +86,14 @@ type Querier interface {
 	// Cross-cutting writes done in the same transaction as the change they describe.
 	// audit_log is append-only (a trigger blocks UPDATE). action = the permission key.
 	InsertAuditEntry(ctx context.Context, arg InsertAuditEntryParams) error
+	InsertCanvasPlacement(ctx context.Context, arg InsertCanvasPlacementParams) (uuid.UUID, error)
+	InsertCanvasShape(ctx context.Context, arg InsertCanvasShapeParams) (uuid.UUID, error)
 	InsertInventoryPlacement(ctx context.Context, arg InsertInventoryPlacementParams) error
 	InsertLink(ctx context.Context, arg InsertLinkParams) (Link, error)
 	InsertMember(ctx context.Context, arg InsertMemberParams) error
 	InsertNode(ctx context.Context, arg InsertNodeParams) (Node, error)
 	InsertNote(ctx context.Context, arg InsertNoteParams) (Note, error)
+	InsertTabCanvas(ctx context.Context, arg InsertTabCanvasParams) (Canvase, error)
 	// Must run inside pg.InWorkspace (RLS). Notifies listeners on commit.
 	InsertWorkspaceEvent(ctx context.Context, arg InsertWorkspaceEventParams) (uuid.UUID, error)
 	InventoryCanvasIDs(ctx context.Context, arg InventoryCanvasIDsParams) ([]uuid.UUID, error)
@@ -81,7 +101,14 @@ type Querier interface {
 	IsGrantedTabCanvas(ctx context.Context, arg IsGrantedTabCanvasParams) (bool, error)
 	LinkExists(ctx context.Context, arg LinkExistsParams) (bool, error)
 	LinkIdentity(ctx context.Context, arg LinkIdentityParams) (UserIdentity, error)
+	ListAreaBreadcrumb(ctx context.Context, arg ListAreaBreadcrumbParams) ([]ListAreaBreadcrumbRow, error)
+	ListAreaChildAreas(ctx context.Context, arg ListAreaChildAreasParams) ([]uuid.UUID, error)
+	ListAreaChildNodes(ctx context.Context, arg ListAreaChildNodesParams) ([]uuid.UUID, error)
 	ListAreasVisible(ctx context.Context, arg ListAreasVisibleParams) ([]ListAreasVisibleRow, error)
+	ListCanvasLinkOverrides(ctx context.Context, arg ListCanvasLinkOverridesParams) ([]Placement, error)
+	ListCanvasPlacements(ctx context.Context, arg ListCanvasPlacementsParams) ([]Placement, error)
+	ListCanvasShapes(ctx context.Context, arg ListCanvasShapesParams) ([]CanvasShape, error)
+	ListCanvasViewLinkIDs(ctx context.Context, arg ListCanvasViewLinkIDsParams) ([]uuid.UUID, error)
 	// Editors only. canvas_grants has RLS: call inside pg.InWorkspace.
 	ListGrantedCanvasIDs(ctx context.Context, arg ListGrantedCanvasIDsParams) ([]uuid.UUID, error)
 	ListIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
@@ -94,11 +121,14 @@ type Querier interface {
 	ListNodeUsageCanvases(ctx context.Context, arg ListNodeUsageCanvasesParams) ([]ListNodeUsageCanvasesRow, error)
 	ListNodesVisible(ctx context.Context, arg ListNodesVisibleParams) ([]Node, error)
 	ListNotesVisible(ctx context.Context, arg ListNotesVisibleParams) ([]Note, error)
+	// All canvas data queries run inside pg.InWorkspace and filter workspace_id.
+	ListTabCanvases(ctx context.Context, arg ListTabCanvasesParams) ([]Canvase, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Resume after Last-Event-ID (UUIDv7 ids sort by time).
 	ListWorkspaceEventsAfter(ctx context.Context, arg ListWorkspaceEventsAfterParams) ([]WorkspaceEvent, error)
 	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error)
 	LockArea(ctx context.Context, arg LockAreaParams) (Area, error)
+	LockCanvasRow(ctx context.Context, arg LockCanvasRowParams) (Canvase, error)
 	LockLink(ctx context.Context, arg LockLinkParams) (Link, error)
 	LockMember(ctx context.Context, arg LockMemberParams) (WorkspaceMember, error)
 	LockNode(ctx context.Context, arg LockNodeParams) (Node, error)
@@ -110,7 +140,11 @@ type Querier interface {
 	NodeSlugExists(ctx context.Context, arg NodeSlugExistsParams) (bool, error)
 	PruneWorkspaceEvents(ctx context.Context, keepHours int32) (int64, error)
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
+	ReparentCanvasNode(ctx context.Context, arg ReparentCanvasNodeParams) error
 	ReplaceCanvasGrants(ctx context.Context, arg ReplaceCanvasGrantsParams) error
+	SeedAreaCanvasAreas(ctx context.Context, arg SeedAreaCanvasAreasParams) error
+	SeedAreaCanvasNodes(ctx context.Context, arg SeedAreaCanvasNodesParams) error
+	SetCanvasLock(ctx context.Context, arg SetCanvasLockParams) (Canvase, error)
 	SetNodeHealthInventory(ctx context.Context, arg SetNodeHealthInventoryParams) (Node, error)
 	SetUserLastLogin(ctx context.Context, id uuid.UUID) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
@@ -122,12 +156,16 @@ type Querier interface {
 	TryLockSetup(ctx context.Context) (bool, error)
 	UnlinkIdentity(ctx context.Context, arg UnlinkIdentityParams) (int64, error)
 	UpdateAreaInventory(ctx context.Context, arg UpdateAreaInventoryParams) (Area, error)
+	UpdateCanvasPlacement(ctx context.Context, arg UpdateCanvasPlacementParams) (uuid.UUID, error)
+	UpdateCanvasRow(ctx context.Context, arg UpdateCanvasRowParams) (Canvase, error)
+	UpdateCanvasShape(ctx context.Context, arg UpdateCanvasShapeParams) (uuid.UUID, error)
 	UpdateLinkInventory(ctx context.Context, arg UpdateLinkInventoryParams) (Link, error)
 	UpdateMember(ctx context.Context, arg UpdateMemberParams) (int64, error)
 	UpdateNodeInventory(ctx context.Context, arg UpdateNodeInventoryParams) (Node, error)
 	UpdateNoteInventory(ctx context.Context, arg UpdateNoteInventoryParams) (Note, error)
 	UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error)
 	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)
+	UpsertCanvasLinkOverride(ctx context.Context, arg UpsertCanvasLinkOverrideParams) error
 	UpsertInstanceSetting(ctx context.Context, arg UpsertInstanceSettingParams) error
 	// Every query here runs inside pg.InWorkspace and filters by workspace_id.
 	// Editor visibility is computed in SQL, not by loading the full inventory into Go.

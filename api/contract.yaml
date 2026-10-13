@@ -1273,6 +1273,7 @@ paths:
               schema: { $ref: '#/components/schemas/CanvasOperationResult' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '423': { $ref: '#/components/responses/Locked' }
 

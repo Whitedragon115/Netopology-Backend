@@ -101,6 +101,7 @@ func features(d Deps) []featureHandler {
 	}
 	accountService := account.NewService(d.DB)
 	accountService.SetOAuthLinkStarter(authService)
+	inventoryService := inventory.NewService(d.DB, az)
 
 	return []featureHandler{
 		setup.NewHandler(setup.NewService(d.DB, sessions)),
@@ -108,8 +109,8 @@ func features(d Deps) []featureHandler {
 		account.NewHandler(accountService),
 		workspace.NewHandler(workspace.NewService(d.DB, az)),
 		member.NewHandler(member.NewService(d.DB, az)),
-		inventory.NewHandler(inventory.NewService(d.DB, az)),
-		canvas.NewHandler(canvas.NewService(d.DB, az)),
+		inventory.NewHandler(inventoryService),
+		canvas.NewHandler(canvas.NewService(d.DB, az, inventoryService)),
 		share.NewHandler(share.NewService(d.DB, az)),
 		events.NewHandler(events.NewService(d.DB, az)),
 		audit.NewHandler(audit.NewService(d.DB, az)),
