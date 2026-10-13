@@ -13,6 +13,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const countTabCanvases = `-- name: CountTabCanvases :one
+SELECT count(*) FROM canvases
+WHERE workspace_id = $1 AND area_id IS NULL AND id = ANY($2::uuid[])
+`
+
+type CountTabCanvasesParams struct {
+	WorkspaceID uuid.UUID
+	Column2     []uuid.UUID
+}
+
+func (q *Queries) CountTabCanvases(ctx context.Context, arg CountTabCanvasesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTabCanvases, arg.WorkspaceID, arg.Column2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createWorkspace = `-- name: CreateWorkspace :one
 
 INSERT INTO workspaces (name, slug, description, created_by)
@@ -52,6 +69,23 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 	return i, err
 }
 
+const deleteMember = `-- name: DeleteMember :execrows
+DELETE FROM workspace_members WHERE workspace_id = $1 AND user_id = $2
+`
+
+type DeleteMemberParams struct {
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
+}
+
+func (q *Queries) DeleteMember(ctx context.Context, arg DeleteMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMember, arg.WorkspaceID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteWorkspace = `-- name: DeleteWorkspace :execrows
 DELETE FROM workspaces WHERE id = $1 AND version = $2
 `
@@ -67,6 +101,44 @@ func (q *Queries) DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getMember = `-- name: GetMember :one
+SELECT m.workspace_id, m.user_id, m.role, m.can_view_sensitive, m.created_at,
+       u.username, u.display_name
+FROM workspace_members m
+JOIN users u ON u.id = m.user_id
+WHERE m.workspace_id = $1 AND m.user_id = $2
+`
+
+type GetMemberParams struct {
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
+}
+
+type GetMemberRow struct {
+	WorkspaceID      uuid.UUID
+	UserID           uuid.UUID
+	Role             string
+	CanViewSensitive bool
+	CreatedAt        time.Time
+	Username         string
+	DisplayName      string
+}
+
+func (q *Queries) GetMember(ctx context.Context, arg GetMemberParams) (GetMemberRow, error) {
+	row := q.db.QueryRow(ctx, getMember, arg.WorkspaceID, arg.UserID)
+	var i GetMemberRow
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.UserID,
+		&i.Role,
+		&i.CanViewSensitive,
+		&i.CreatedAt,
+		&i.Username,
+		&i.DisplayName,
+	)
+	return i, err
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
@@ -113,6 +185,84 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) erro
 		arg.AddedBy,
 	)
 	return err
+}
+
+const listMemberGrants = `-- name: ListMemberGrants :many
+SELECT canvas_id FROM canvas_grants
+WHERE workspace_id = $1 AND user_id = $2 ORDER BY canvas_id
+`
+
+type ListMemberGrantsParams struct {
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
+}
+
+func (q *Queries) ListMemberGrants(ctx context.Context, arg ListMemberGrantsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMemberGrants, arg.WorkspaceID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var canvas_id uuid.UUID
+		if err := rows.Scan(&canvas_id); err != nil {
+			return nil, err
+		}
+		items = append(items, canvas_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT m.workspace_id, m.user_id, m.role, m.can_view_sensitive, m.created_at,
+       u.username, u.display_name
+FROM workspace_members m
+JOIN users u ON u.id = m.user_id
+WHERE m.workspace_id = $1
+ORDER BY m.created_at, m.user_id
+`
+
+type ListMembersRow struct {
+	WorkspaceID      uuid.UUID
+	UserID           uuid.UUID
+	Role             string
+	CanViewSensitive bool
+	CreatedAt        time.Time
+	Username         string
+	DisplayName      string
+}
+
+// Membership records are access-control data, so these joins run outside RLS.
+func (q *Queries) ListMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListMembersRow, error) {
+	rows, err := q.db.Query(ctx, listMembers, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMembersRow{}
+	for rows.Next() {
+		var i ListMembersRow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.UserID,
+			&i.Role,
+			&i.CanViewSensitive,
+			&i.CreatedAt,
+			&i.Username,
+			&i.DisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
@@ -171,6 +321,56 @@ func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) (
 	return items, nil
 }
 
+const lockMember = `-- name: LockMember :one
+SELECT workspace_id, user_id, role, can_view_sensitive, added_by, created_at, updated_at FROM workspace_members
+WHERE workspace_id = $1 AND user_id = $2 FOR UPDATE
+`
+
+type LockMemberParams struct {
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
+}
+
+func (q *Queries) LockMember(ctx context.Context, arg LockMemberParams) (WorkspaceMember, error) {
+	row := q.db.QueryRow(ctx, lockMember, arg.WorkspaceID, arg.UserID)
+	var i WorkspaceMember
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.UserID,
+		&i.Role,
+		&i.CanViewSensitive,
+		&i.AddedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lockOwners = `-- name: LockOwners :many
+SELECT user_id FROM workspace_members
+WHERE workspace_id = $1 AND role = 'owner' FOR UPDATE
+`
+
+func (q *Queries) LockOwners(ctx context.Context, workspaceID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockOwners, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var user_id uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockWorkspace = `-- name: LockWorkspace :one
 SELECT id, name, slug, description, is_protected, settings, created_by, created_at, updated_at, version FROM workspaces WHERE id = $1 FOR UPDATE
 `
@@ -193,6 +393,35 @@ func (q *Queries) LockWorkspace(ctx context.Context, id uuid.UUID) (Workspace, e
 	return i, err
 }
 
+const replaceCanvasGrants = `-- name: ReplaceCanvasGrants :exec
+WITH desired AS (SELECT unnest($3::uuid[]) AS canvas_id),
+deleted AS (
+  DELETE FROM canvas_grants
+  WHERE workspace_id = $1 AND user_id = $2 AND canvas_id NOT IN (SELECT canvas_id FROM desired)
+  RETURNING canvas_id
+)
+INSERT INTO canvas_grants (workspace_id, user_id, canvas_id, granted_by)
+SELECT $1, $2, desired.canvas_id, $4 FROM desired CROSS JOIN (SELECT count(*) FROM deleted) AS guard
+ON CONFLICT (canvas_id, user_id) DO NOTHING
+`
+
+type ReplaceCanvasGrantsParams struct {
+	WorkspaceID uuid.UUID
+	UserID      uuid.UUID
+	Column3     []uuid.UUID
+	GrantedBy   *uuid.UUID
+}
+
+func (q *Queries) ReplaceCanvasGrants(ctx context.Context, arg ReplaceCanvasGrantsParams) error {
+	_, err := q.db.Exec(ctx, replaceCanvasGrants,
+		arg.WorkspaceID,
+		arg.UserID,
+		arg.Column3,
+		arg.GrantedBy,
+	)
+	return err
+}
+
 const slugExists = `-- name: SlugExists :one
 SELECT EXISTS(SELECT 1 FROM workspaces WHERE slug = $1)
 `
@@ -202,6 +431,31 @@ func (q *Queries) SlugExists(ctx context.Context, slug string) (bool, error) {
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const updateMember = `-- name: UpdateMember :execrows
+UPDATE workspace_members SET role = $3, can_view_sensitive = $4
+WHERE workspace_id = $1 AND user_id = $2
+`
+
+type UpdateMemberParams struct {
+	WorkspaceID      uuid.UUID
+	UserID           uuid.UUID
+	Role             string
+	CanViewSensitive bool
+}
+
+func (q *Queries) UpdateMember(ctx context.Context, arg UpdateMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMember,
+		arg.WorkspaceID,
+		arg.UserID,
+		arg.Role,
+		arg.CanViewSensitive,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateWorkspace = `-- name: UpdateWorkspace :one

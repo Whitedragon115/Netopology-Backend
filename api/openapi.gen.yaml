@@ -134,6 +134,16 @@ components:
         - password
         - providers
       type: object
+    CanvasGrants:
+      additionalProperties: false
+      properties:
+        canvasIds:
+          items:
+            type: string
+          type: array
+      required:
+        - canvasIds
+      type: object
     Identity:
       additionalProperties: false
       properties:
@@ -222,6 +232,78 @@ components:
           type:
             - string
             - "null"
+      type: object
+    Member:
+      additionalProperties: false
+      properties:
+        canViewSensitive:
+          type: boolean
+        canvasIds:
+          items:
+            type: string
+          type: array
+        createdAt:
+          format: date-time
+          type: string
+        role:
+          enum:
+            - owner
+            - admin
+            - editor
+            - viewer
+          type: string
+        user:
+          $ref: "#/components/schemas/PublicUser"
+      required:
+        - user
+        - role
+      type: object
+    MemberAdd:
+      additionalProperties: false
+      properties:
+        canViewSensitive:
+          default: false
+          type: boolean
+        canvasIds:
+          items:
+            type: string
+          type: array
+        role:
+          enum:
+            - owner
+            - admin
+            - editor
+            - viewer
+          type: string
+        userId:
+          format: uuid
+          type: string
+      required:
+        - userId
+        - role
+      type: object
+    MemberPage:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Member"
+          type: array
+      required:
+        - items
+      type: object
+    MemberUpdate:
+      additionalProperties: false
+      properties:
+        canViewSensitive:
+          type: boolean
+        role:
+          enum:
+            - owner
+            - admin
+            - editor
+            - viewer
+          type: string
       type: object
     Membership:
       additionalProperties: false
@@ -328,6 +410,21 @@ components:
       required:
         - id
         - name
+      type: object
+    PublicUser:
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+        id:
+          format: uuid
+          type: string
+        username:
+          type: string
+      required:
+        - id
+        - username
+        - displayName
       type: object
     SetupRequest:
       additionalProperties: false
@@ -1532,6 +1629,273 @@ paths:
       tags:
         - Workspaces
       x-permission: workspace.update
+  /workspaces/{wsId}/members:
+    get:
+      operationId: listMembers
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberPage"
+          description: OK
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: List members
+      tags:
+        - Members
+      x-permission: member.list
+    post:
+      operationId: addMember
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberAdd"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+          description: Created
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Add an existing account to this workspace
+      tags:
+        - Members
+      x-permission: member.add
+  /workspaces/{wsId}/members/{userId}:
+    delete:
+      operationId: removeMember
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: userId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Remove a member (or leave, when it is yourself)
+      tags:
+        - Members
+      x-permission: member.remove
+    patch:
+      operationId: updateMember
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: userId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberUpdate"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+          description: OK
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Change a member's role or sensitive-info access
+      tags:
+        - Members
+      x-permission: member.update
+  /workspaces/{wsId}/members/{userId}/canvas-grants:
+    put:
+      operationId: setMemberCanvasGrants
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: userId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CanvasGrants"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+          description: OK
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Set which canvases an editor may use (replaces the list)
+      tags:
+        - Members
+      x-permission: member.grants_set
 security:
   - session: []
 servers:

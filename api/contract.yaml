@@ -1948,18 +1948,20 @@ components:
         settings: { type: object, additionalProperties: true }
     Member:
       type: object
-      required: [user, role, canViewSensitive, canvasIds, createdAt]
+      required: [user, role]
       properties:
         user: { $ref: '#/components/schemas/User' }
         role: { $ref: '#/components/schemas/Role' }
         canViewSensitive:
           type: boolean
-          description: Always true in effect for owner/admin
+          description: Visible to owners and admins only; always true in effect for owner/admin
         canvasIds:
           type: array
-          description: Granted canvases (editors only; empty for other roles)
+          description: Visible to owners and admins only; granted canvases for editors (empty for other roles)
           items: { $ref: '#/components/schemas/Id' }
-        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        createdAt:
+          allOf: [{ $ref: '#/components/schemas/Timestamp' }]
+          description: Visible to owners and admins only
     MemberAdd:
       type: object
       required: [userId, role]

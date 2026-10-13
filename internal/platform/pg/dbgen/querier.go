@@ -12,6 +12,7 @@ import (
 )
 
 type Querier interface {
+	CountTabCanvases(ctx context.Context, arg CountTabCanvasesParams) (int64, error)
 	CountUserIdentities(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Feature: setup (internal/setup). Reference implementation, see docs/ARCHITECTURE.md §12.
 	CountUsers(ctx context.Context) (int64, error)
@@ -22,6 +23,7 @@ type Querier interface {
 	// workspaces and workspace_members have no RLS: the service checks membership first.
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	DeleteMember(ctx context.Context, arg DeleteMemberParams) (int64, error)
 	DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) (int64, error)
 	DeleteSession(ctx context.Context, id uuid.UUID) error
 	// Password reset, account disabled: end every session of that user.
@@ -35,6 +37,7 @@ type Querier interface {
 	GetInstanceOwnerForUpdate(ctx context.Context) (User, error)
 	// Instance settings are not workspace scoped. Services authorize all access.
 	GetInstanceSetting(ctx context.Context, key string) (json.RawMessage, error)
+	GetMember(ctx context.Context, arg GetMemberParams) (GetMemberRow, error)
 	// Authorization lookups (internal/authz). Used by every workspace-scoped request.
 	// workspace_members has no RLS (it decides access). No row = not a member = 404.
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
@@ -61,14 +64,20 @@ type Querier interface {
 	ListIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
 	// For Account.identities.
 	ListIdentityProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
+	ListMemberGrants(ctx context.Context, arg ListMemberGrantsParams) ([]uuid.UUID, error)
+	// Membership records are access-control data, so these joins run outside RLS.
+	ListMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListMembersRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Resume after Last-Event-ID (UUIDv7 ids sort by time).
 	ListWorkspaceEventsAfter(ctx context.Context, arg ListWorkspaceEventsAfterParams) ([]WorkspaceEvent, error)
 	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error)
+	LockMember(ctx context.Context, arg LockMemberParams) (WorkspaceMember, error)
+	LockOwners(ctx context.Context, workspaceID uuid.UUID) ([]uuid.UUID, error)
 	LockWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error)
 	LookupUserByUsername(ctx context.Context, username string) (LookupUserByUsernameRow, error)
 	PruneWorkspaceEvents(ctx context.Context, keepHours int32) (int64, error)
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
+	ReplaceCanvasGrants(ctx context.Context, arg ReplaceCanvasGrantsParams) error
 	SetUserLastLogin(ctx context.Context, id uuid.UUID) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
@@ -78,6 +87,7 @@ type Querier interface {
 	// Serializes concurrent completeSetup calls inside one transaction (released at commit).
 	TryLockSetup(ctx context.Context) (bool, error)
 	UnlinkIdentity(ctx context.Context, arg UnlinkIdentityParams) (int64, error)
+	UpdateMember(ctx context.Context, arg UpdateMemberParams) (int64, error)
 	UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error)
 	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)
 	UpsertInstanceSetting(ctx context.Context, arg UpsertInstanceSettingParams) error

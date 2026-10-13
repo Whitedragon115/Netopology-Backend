@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Whitedragon115/Netopology-Backend/internal/auth"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/config"
 	"github.com/Whitedragon115/Netopology-Backend/internal/server"
@@ -182,6 +184,28 @@ func (a *API) CreateUser(username, role string) *Client {
 		"username": username, "password": password, "instanceRole": role,
 	}).Expect(a.t, http.StatusCreated)
 	return a.Login(username, password)
+}
+
+// AddMember adds an existing account through the owner-facing API.
+func (a *API) AddMember(wsID, userID uuid.UUID, role string) {
+	a.Login("owner", "owner-password-123").Do(http.MethodPost,
+		"/workspaces/"+wsID.String()+"/members", map[string]any{"userId": userID, "role": role}).Expect(a.t, http.StatusCreated)
+}
+
+// ClientAs creates a signed-in member of the first workspace. Call Owner first.
+func (a *API) ClientAs(role string) *Client {
+	var workspaces struct{ Items []struct{ ID uuid.UUID } }
+	a.Login("owner", "owner-password-123").Do(http.MethodGet, "/workspaces", nil).
+		Expect(a.t, http.StatusOK).JSON(a.t, &workspaces)
+	if len(workspaces.Items) == 0 {
+		a.t.Fatal("ClientAs requires a workspace")
+	}
+	username := "fixture-" + uuid.NewString()[:8]
+	client := a.CreateUser(username, "member")
+	var me struct{ ID uuid.UUID }
+	client.Do(http.MethodGet, "/me", nil).Expect(a.t, http.StatusOK).JSON(a.t, &me)
+	a.AddMember(workspaces.Items[0].ID, me.ID, role)
+	return client
 }
 
 type testWriter struct{ t testing.TB }

@@ -13,7 +13,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | 04 | Accounts: `/me`, `/users`, instance settings | 03 | ✅ done |
 | 05 | Google + Discord sign-in and linking | 04 | ✅ done |
 | 06 | Workspaces | 03 | ✅ done |
-| 07 | Members and canvas grants | 06 | ⏳ |
+| 07 | Members and canvas grants | 06 | ✅ done |
 | 08 | Inventory reads, visibility set, redaction | 07 | ⏳ |
 | 09 | Inventory writes | 08 | ⏳ |
 | 10 | Canvases, canvas view, operations, lock | 09 | ⏳ |
