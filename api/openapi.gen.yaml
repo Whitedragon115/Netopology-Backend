@@ -190,6 +190,51 @@ components:
         - updatedAt
         - version
       type: object
+    AreaCreate:
+      additionalProperties: false
+      properties:
+        cidr:
+          type: string
+        color:
+          enum:
+            - yellow
+            - teal
+            - violet
+            - rose
+            - blue
+            - green
+            - gray
+          type: string
+        description:
+          type: string
+        kind:
+          enum:
+            - site
+            - network
+            - vlan
+            - cloud
+            - custom
+          type: string
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+        parentId:
+          type: string
+        placeOn:
+          $ref: "#/components/schemas/PlaceOn"
+        properties:
+          items:
+            $ref: "#/components/schemas/Field"
+          type: array
+        vlanId:
+          format: int32
+          maximum: 4094
+          minimum: 1
+          type: integer
+      required:
+        - name
+      type: object
     AreaPage:
       additionalProperties: false
       properties:
@@ -201,6 +246,47 @@ components:
           type: string
       required:
         - items
+      type: object
+    AreaUpdate:
+      additionalProperties: false
+      properties:
+        cidr:
+          type: string
+        color:
+          enum:
+            - yellow
+            - teal
+            - violet
+            - rose
+            - blue
+            - green
+            - gray
+          type: string
+        description:
+          type: string
+        kind:
+          enum:
+            - site
+            - network
+            - vlan
+            - cloud
+            - custom
+          type: string
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+        parentId:
+          type: string
+        properties:
+          items:
+            $ref: "#/components/schemas/Field"
+          type: array
+        vlanId:
+          format: int32
+          maximum: 4094
+          minimum: 1
+          type: integer
       type: object
     AuthProviders:
       additionalProperties: false
@@ -268,6 +354,22 @@ components:
       required:
         - status
         - source
+      type: object
+    HealthSet:
+      additionalProperties: false
+      properties:
+        message:
+          maxLength: 500
+          type: string
+        status:
+          enum:
+            - healthy
+            - degraded
+            - down
+            - unknown
+          type: string
+      required:
+        - status
       type: object
     Identity:
       additionalProperties: false
@@ -375,6 +477,41 @@ components:
         - updatedAt
         - version
       type: object
+    LinkCreate:
+      additionalProperties: false
+      properties:
+        directed:
+          type: boolean
+        kind:
+          enum:
+            - physical
+            - vpn_tunnel
+            - proxy_route
+            - dns_dependency
+            - storage_mount
+            - logical
+          type: string
+        label:
+          type: string
+        properties:
+          items:
+            $ref: "#/components/schemas/Field"
+          type: array
+        sourceNodeId:
+          format: uuid
+          type: string
+        sourcePort:
+          type: string
+        targetNodeId:
+          format: uuid
+          type: string
+        targetPort:
+          type: string
+      required:
+        - sourceNodeId
+        - targetNodeId
+        - kind
+      type: object
     LinkPage:
       additionalProperties: false
       properties:
@@ -386,6 +523,31 @@ components:
           type: string
       required:
         - items
+      type: object
+    LinkUpdate:
+      additionalProperties: false
+      properties:
+        directed:
+          type: boolean
+        kind:
+          enum:
+            - physical
+            - vpn_tunnel
+            - proxy_route
+            - dns_dependency
+            - storage_mount
+            - logical
+          type: string
+        label:
+          type: string
+        properties:
+          items:
+            $ref: "#/components/schemas/Field"
+          type: array
+        sourcePort:
+          type: string
+        targetPort:
+          type: string
       type: object
     ListMyIdentitiesOutputBody:
       additionalProperties: false
@@ -578,6 +740,44 @@ components:
         - updatedAt
         - version
       type: object
+    NodeCreate:
+      additionalProperties: false
+      properties:
+        areaId:
+          type: string
+        category:
+          enum:
+            - network
+            - compute
+            - service
+            - storage
+            - external
+            - generic
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        isProtected:
+          type: boolean
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+        placeOn:
+          $ref: "#/components/schemas/PlaceOn"
+        properties:
+          items:
+            $ref: "#/components/schemas/Field"
+          type: array
+        slug:
+          type: string
+        type:
+          type: string
+      required:
+        - name
+        - category
+      type: object
     NodePage:
       additionalProperties: false
       properties:
@@ -589,6 +789,39 @@ components:
           type: string
       required:
         - items
+      type: object
+    NodeUpdate:
+      additionalProperties: false
+      properties:
+        areaId:
+          type: string
+        category:
+          enum:
+            - network
+            - compute
+            - service
+            - storage
+            - external
+            - generic
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        isProtected:
+          type: boolean
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+        properties:
+          items:
+            $ref: "#/components/schemas/Field"
+          type: array
+        slug:
+          type: string
+        type:
+          type: string
       type: object
     NodeUsage:
       additionalProperties: false
@@ -679,6 +912,37 @@ components:
         - updatedAt
         - version
       type: object
+    NoteCreate:
+      additionalProperties: false
+      properties:
+        body:
+          type: string
+        color:
+          enum:
+            - default
+            - yellow
+            - teal
+            - violet
+            - rose
+          type: string
+        isSensitive:
+          type: boolean
+        kind:
+          enum:
+            - note
+            - rule
+          type: string
+        placeOn:
+          $ref: "#/components/schemas/PlaceOn"
+        target:
+          $ref: "#/components/schemas/NoteTarget"
+        title:
+          maxLength: 200
+          type: string
+      required:
+        - target
+        - body
+      type: object
     NotePage:
       additionalProperties: false
       properties:
@@ -706,6 +970,30 @@ components:
           type: string
       required:
         - type
+      type: object
+    NoteUpdate:
+      additionalProperties: false
+      properties:
+        body:
+          type: string
+        color:
+          enum:
+            - default
+            - yellow
+            - teal
+            - violet
+            - rose
+          type: string
+        isSensitive:
+          type: boolean
+        kind:
+          enum:
+            - note
+            - rule
+          type: string
+        title:
+          maxLength: 200
+          type: string
       type: object
     Page:
       additionalProperties: false
@@ -742,6 +1030,32 @@ components:
           writeOnly: true
       required:
         - newPassword
+      type: object
+    PlaceOn:
+      additionalProperties: false
+      properties:
+        canvasId:
+          format: uuid
+          type: string
+        height:
+          format: double
+          type: number
+        parentPlacementId:
+          type: string
+        style:
+          additionalProperties: {}
+          type: object
+        width:
+          format: double
+          type: number
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+      required:
+        - canvasId
       type: object
     Problem:
       additionalProperties: false
@@ -2077,7 +2391,121 @@ paths:
       tags:
         - Areas
       x-permission: area.list
+    post:
+      description: Editors must include `placeOn` with a canvas granted to them.
+      operationId: createArea
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AreaCreate"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+          description: Created
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Create an area
+      tags:
+        - Areas
+      x-permission: area.create
   /workspaces/{wsId}/areas/{areaId}:
+    delete:
+      operationId: deleteArea
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: areaId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Delete an area (child areas and nodes move to the top level)
+      tags:
+        - Areas
+      x-permission: area.delete
     get:
       operationId: getArea
       parameters:
@@ -2126,6 +2554,80 @@ paths:
       tags:
         - Areas
       x-permission: area.read
+    patch:
+      operationId: updateArea
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: areaId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AreaUpdate"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Area"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Update an area (including moving it under another parent)
+      tags:
+        - Areas
+      x-permission: area.update
   /workspaces/{wsId}/links:
     get:
       operationId: listLinks
@@ -2199,7 +2701,115 @@ paths:
       tags:
         - Links
       x-permission: link.list
+    post:
+      description: The link appears automatically on every canvas where both nodes are placed (unless that canvas hides it).
+      operationId: createLink
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkCreate"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Link"
+          description: Created
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Create a link between two nodes
+      tags:
+        - Links
+      x-permission: link.create
   /workspaces/{wsId}/links/{linkId}:
+    delete:
+      operationId: deleteLink
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: linkId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Delete a link from the inventory (removes it from every canvas)
+      tags:
+        - Links
+      x-permission: link.delete
     get:
       operationId: getLink
       parameters:
@@ -2248,6 +2858,74 @@ paths:
       tags:
         - Links
       x-permission: link.read
+    patch:
+      operationId: updateLink
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: linkId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkUpdate"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Link"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Update a link
+      tags:
+        - Links
+      x-permission: link.update
   /workspaces/{wsId}/members:
     get:
       operationId: listMembers
@@ -2611,7 +3289,127 @@ paths:
       tags:
         - Nodes
       x-permission: node.list
+    post:
+      description: Editors must include `placeOn` with a canvas granted to them. `slug` is generated from the name if omitted.
+      operationId: createNode
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NodeCreate"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Node"
+          description: Created
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Create a node
+      tags:
+        - Nodes
+      x-permission: node.create
   /workspaces/{wsId}/nodes/{nodeId}:
+    delete:
+      operationId: deleteNode
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: nodeId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Delete a node from the inventory (removes it, its links and notes from every canvas)
+      tags:
+        - Nodes
+      x-permission: node.delete
     get:
       operationId: getNode
       parameters:
@@ -2660,6 +3458,136 @@ paths:
       tags:
         - Nodes
       x-permission: node.read
+    patch:
+      operationId: updateNode
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: nodeId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NodeUpdate"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Node"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Conflict
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Update a node (visible on every canvas it is placed on)
+      tags:
+        - Nodes
+      x-permission: node.update
+  /workspaces/{wsId}/nodes/{nodeId}/health:
+    put:
+      description: Plugin-driven health arrives in phase C3 and takes precedence when present.
+      operationId: setNodeHealth
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: nodeId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthSet"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Node"
+          description: OK
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Set a node's health manually
+      tags:
+        - Nodes
+      x-permission: node.health_set
   /workspaces/{wsId}/nodes/{nodeId}/usage:
     get:
       operationId: getNodeUsage
@@ -2793,7 +3721,114 @@ paths:
       tags:
         - Notes
       x-permission: note.list
+    post:
+      operationId: createNote
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteCreate"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+          description: Created
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Create a note
+      tags:
+        - Notes
+      x-permission: note.create
   /workspaces/{wsId}/notes/{noteId}:
+    delete:
+      operationId: deleteNote
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: noteId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Delete a note
+      tags:
+        - Notes
+      x-permission: note.delete
     get:
       operationId: getNote
       parameters:
@@ -2842,6 +3877,74 @@ paths:
       tags:
         - Notes
       x-permission: note.read
+    patch:
+      operationId: updateNote
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: noteId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: If-Match
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteUpdate"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Precondition Failed
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Update a note
+      tags:
+        - Notes
+      x-permission: note.update
 security:
   - session: []
 servers:

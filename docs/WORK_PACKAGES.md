@@ -15,7 +15,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | 06 | Workspaces | 03 | ✅ done |
 | 07 | Members and canvas grants | 06 | ✅ done |
 | 08 | Inventory reads, visibility set, redaction | 07 | ✅ done |
-| 09 | Inventory writes | 08 | ⏳ |
+| 09 | Inventory writes | 08 | ✅ done |
 | 10 | Canvases, canvas view, operations, lock | 09 | ⏳ |
 | 11 | Live events (SSE) | 08 (10 for canvas events) | ⏳ |
 | 12 | Share links and guests | 10 | ⏳ |

@@ -79,6 +79,7 @@ func (h *Handler) Register(api huma.API) {
 		"listNotes", "Notes", "List notes", httpx.Describe("Filter by one target. Without a filter, returns workspace-level notes."), httpx.Errors(404)), h.listNotes)
 	huma.Register(api, httpx.Op(authz.NoteRead, http.MethodGet, "/workspaces/{wsId}/notes/{noteId}",
 		"getNote", "Notes", "Get a note", httpx.Errors(404)), h.getNote)
+	h.registerWrites(api)
 }
 
 type listAreasInput struct {

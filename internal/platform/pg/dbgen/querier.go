@@ -12,6 +12,7 @@ import (
 )
 
 type Querier interface {
+	AreaExists(ctx context.Context, arg AreaExistsParams) (bool, error)
 	CountNodeLinks(ctx context.Context, arg CountNodeLinksParams) (int64, error)
 	CountNodeNotes(ctx context.Context, arg CountNodeNotesParams) (int64, error)
 	CountTabCanvases(ctx context.Context, arg CountTabCanvasesParams) (int64, error)
@@ -24,8 +25,12 @@ type Querier interface {
 	// Workspaces and members (internal/workspace, internal/member; also used by internal/setup).
 	// workspaces and workspace_members have no RLS: the service checks membership first.
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
+	DeleteAreaInventory(ctx context.Context, arg DeleteAreaInventoryParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	DeleteLinkInventory(ctx context.Context, arg DeleteLinkInventoryParams) (int64, error)
 	DeleteMember(ctx context.Context, arg DeleteMemberParams) (int64, error)
+	DeleteNodeInventory(ctx context.Context, arg DeleteNodeInventoryParams) (int64, error)
+	DeleteNoteInventory(ctx context.Context, arg DeleteNoteInventoryParams) (int64, error)
 	DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) (int64, error)
 	DeleteSession(ctx context.Context, id uuid.UUID) error
 	// Password reset, account disabled: end every session of that user.
@@ -40,6 +45,7 @@ type Querier interface {
 	GetInstanceOwnerForUpdate(ctx context.Context) (User, error)
 	// Instance settings are not workspace scoped. Services authorize all access.
 	GetInstanceSetting(ctx context.Context, key string) (json.RawMessage, error)
+	GetInventoryCanvas(ctx context.Context, arg GetInventoryCanvasParams) (Canvase, error)
 	GetLinkVisible(ctx context.Context, arg GetLinkVisibleParams) (Link, error)
 	GetMember(ctx context.Context, arg GetMemberParams) (GetMemberRow, error)
 	// Authorization lookups (internal/authz). Used by every workspace-scoped request.
@@ -58,12 +64,22 @@ type Querier interface {
 	GetWorkspaceEvent(ctx context.Context, arg GetWorkspaceEventParams) (WorkspaceEvent, error)
 	HasManagerMembership(ctx context.Context, userID uuid.UUID) (bool, error)
 	HasRecentProviderSignIn(ctx context.Context, arg HasRecentProviderSignInParams) (bool, error)
+	// Inventory mutations run inside pg.InWorkspace. Every statement is workspace scoped.
+	InsertArea(ctx context.Context, arg InsertAreaParams) (Area, error)
 	// Cross-cutting writes done in the same transaction as the change they describe.
 	// audit_log is append-only (a trigger blocks UPDATE). action = the permission key.
 	InsertAuditEntry(ctx context.Context, arg InsertAuditEntryParams) error
+	InsertInventoryPlacement(ctx context.Context, arg InsertInventoryPlacementParams) error
+	InsertLink(ctx context.Context, arg InsertLinkParams) (Link, error)
 	InsertMember(ctx context.Context, arg InsertMemberParams) error
+	InsertNode(ctx context.Context, arg InsertNodeParams) (Node, error)
+	InsertNote(ctx context.Context, arg InsertNoteParams) (Note, error)
 	// Must run inside pg.InWorkspace (RLS). Notifies listeners on commit.
 	InsertWorkspaceEvent(ctx context.Context, arg InsertWorkspaceEventParams) (uuid.UUID, error)
+	InventoryCanvasIDs(ctx context.Context, arg InventoryCanvasIDsParams) ([]uuid.UUID, error)
+	InventoryUsedOutsideGrants(ctx context.Context, arg InventoryUsedOutsideGrantsParams) (bool, error)
+	IsGrantedTabCanvas(ctx context.Context, arg IsGrantedTabCanvasParams) (bool, error)
+	LinkExists(ctx context.Context, arg LinkExistsParams) (bool, error)
 	LinkIdentity(ctx context.Context, arg LinkIdentityParams) (UserIdentity, error)
 	ListAreasVisible(ctx context.Context, arg ListAreasVisibleParams) ([]ListAreasVisibleRow, error)
 	// Editors only. canvas_grants has RLS: call inside pg.InWorkspace.
@@ -82,13 +98,20 @@ type Querier interface {
 	// Resume after Last-Event-ID (UUIDv7 ids sort by time).
 	ListWorkspaceEventsAfter(ctx context.Context, arg ListWorkspaceEventsAfterParams) ([]WorkspaceEvent, error)
 	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error)
+	LockArea(ctx context.Context, arg LockAreaParams) (Area, error)
+	LockLink(ctx context.Context, arg LockLinkParams) (Link, error)
 	LockMember(ctx context.Context, arg LockMemberParams) (WorkspaceMember, error)
+	LockNode(ctx context.Context, arg LockNodeParams) (Node, error)
+	LockNote(ctx context.Context, arg LockNoteParams) (Note, error)
 	LockOwners(ctx context.Context, workspaceID uuid.UUID) ([]uuid.UUID, error)
 	LockWorkspace(ctx context.Context, id uuid.UUID) (Workspace, error)
 	LookupUserByUsername(ctx context.Context, username string) (LookupUserByUsernameRow, error)
+	NodeExists(ctx context.Context, arg NodeExistsParams) (bool, error)
+	NodeSlugExists(ctx context.Context, arg NodeSlugExistsParams) (bool, error)
 	PruneWorkspaceEvents(ctx context.Context, keepHours int32) (int64, error)
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
 	ReplaceCanvasGrants(ctx context.Context, arg ReplaceCanvasGrantsParams) error
+	SetNodeHealthInventory(ctx context.Context, arg SetNodeHealthInventoryParams) (Node, error)
 	SetUserLastLogin(ctx context.Context, id uuid.UUID) error
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
 	SlugExists(ctx context.Context, slug string) (bool, error)
@@ -98,7 +121,11 @@ type Querier interface {
 	// Serializes concurrent completeSetup calls inside one transaction (released at commit).
 	TryLockSetup(ctx context.Context) (bool, error)
 	UnlinkIdentity(ctx context.Context, arg UnlinkIdentityParams) (int64, error)
+	UpdateAreaInventory(ctx context.Context, arg UpdateAreaInventoryParams) (Area, error)
+	UpdateLinkInventory(ctx context.Context, arg UpdateLinkInventoryParams) (Link, error)
 	UpdateMember(ctx context.Context, arg UpdateMemberParams) (int64, error)
+	UpdateNodeInventory(ctx context.Context, arg UpdateNodeInventoryParams) (Node, error)
+	UpdateNoteInventory(ctx context.Context, arg UpdateNoteInventoryParams) (Note, error)
 	UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error)
 	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)
 	UpsertInstanceSetting(ctx context.Context, arg UpsertInstanceSettingParams) error
