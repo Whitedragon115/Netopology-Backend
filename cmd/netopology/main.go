@@ -125,7 +125,7 @@ func runAPI(ctx context.Context, cfg *config.Config, log *slog.Logger) error {
 		}
 	}()
 
-	handler, err := server.New(server.Deps{Config: cfg, DB: db, Log: log})
+	handler, err := server.New(server.Deps{Config: cfg, DB: db, Log: log, Broker: broker})
 	if err != nil {
 		return err
 	}

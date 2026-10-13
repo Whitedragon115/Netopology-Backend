@@ -3755,6 +3755,55 @@ paths:
       tags:
         - Canvases
       x-permission: canvas.view
+  /workspaces/{wsId}/events:
+    get:
+      operationId: streamEvents
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: canvasId
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Last-Event-ID
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                description: "SSE stream; see the Event schema for the payload of each data: line."
+                type: string
+          description: Event stream
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Live updates for this workspace (Server-Sent Events)
+      tags:
+        - Events
+      x-permission: events.stream
   /workspaces/{wsId}/links:
     get:
       operationId: listLinks

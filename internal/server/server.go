@@ -13,6 +13,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 
 	"github.com/Whitedragon115/Netopology-Backend/internal/account"
 	"github.com/Whitedragon115/Netopology-Backend/internal/audit"
@@ -23,6 +24,7 @@ import (
 	"github.com/Whitedragon115/Netopology-Backend/internal/inventory"
 	"github.com/Whitedragon115/Netopology-Backend/internal/member"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/config"
+	platformevents "github.com/Whitedragon115/Netopology-Backend/internal/platform/events"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/httpx"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/pg"
 	"github.com/Whitedragon115/Netopology-Backend/internal/setup"
@@ -39,6 +41,7 @@ type Deps struct {
 	DB             *pg.DB
 	Log            *slog.Logger
 	OAuthProviders map[string]auth.OAuthProvider
+	Broker         *platformevents.Broker
 }
 
 // featureHandler is what every feature exposes to the server.
@@ -102,17 +105,37 @@ func features(d Deps) []featureHandler {
 	accountService := account.NewService(d.DB)
 	accountService.SetOAuthLinkStarter(authService)
 	inventoryService := inventory.NewService(d.DB, az)
+	canvasService := canvas.NewService(d.DB, az, inventoryService)
+	memberService := member.NewService(d.DB, az)
+	canvasReader := func(ctx context.Context, wsID, id uuid.UUID, view bool) (any, error) {
+		if view {
+			return canvasService.GetView(ctx, wsID, id)
+		}
+		return canvasService.Get(ctx, wsID, id)
+	}
+	memberReader := func(ctx context.Context, wsID, id uuid.UUID) (any, error) {
+		page, err := memberService.List(ctx, wsID)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range page.Items {
+			if m.User.ID == id {
+				return m, nil
+			}
+		}
+		return map[string]any{"id": id}, nil
+	}
 
 	return []featureHandler{
 		setup.NewHandler(setup.NewService(d.DB, sessions)),
 		auth.NewHandler(authService),
 		account.NewHandler(accountService),
 		workspace.NewHandler(workspace.NewService(d.DB, az)),
-		member.NewHandler(member.NewService(d.DB, az)),
+		member.NewHandler(memberService),
 		inventory.NewHandler(inventoryService),
-		canvas.NewHandler(canvas.NewService(d.DB, az, inventoryService)),
+		canvas.NewHandler(canvasService),
 		share.NewHandler(share.NewService(d.DB, az)),
-		events.NewHandler(events.NewService(d.DB, az)),
+		events.NewHandler(events.NewService(d.DB, az, d.Broker, inventoryService, canvasReader, memberReader)),
 		audit.NewHandler(audit.NewService(d.DB, az)),
 	}
 }

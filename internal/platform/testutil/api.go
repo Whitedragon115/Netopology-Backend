@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/Whitedragon115/Netopology-Backend/internal/auth"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/config"
+	"github.com/Whitedragon115/Netopology-Backend/internal/platform/events"
 	"github.com/Whitedragon115/Netopology-Backend/internal/server"
 )
 
@@ -61,7 +63,17 @@ func newAPI(t testing.TB, providers map[string]auth.OAuthProvider) *API {
 	if testing.Verbose() {
 		log = slog.New(slog.NewTextHandler(testWriter{t}, nil))
 	}
-	h, err := server.New(server.Deps{Config: cfg, DB: d.DB, Log: log, OAuthProviders: providers})
+	broker := events.NewBroker(d.Pool, log)
+	brokerCtx, cancel := context.WithCancel(t.Context())
+	finished := make(chan struct{})
+	go func() { defer close(finished); _ = broker.Run(brokerCtx) }()
+	t.Cleanup(func() { cancel(); <-finished })
+	select {
+	case <-broker.Ready():
+	case <-time.After(10 * time.Second):
+		t.Fatal("event broker did not become ready")
+	}
+	h, err := server.New(server.Deps{Config: cfg, DB: d.DB, Log: log, OAuthProviders: providers, Broker: broker})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,6 +221,24 @@ func (a *API) ClientAs(role string) *Client {
 }
 
 type testWriter struct{ t testing.TB }
+
+// Stream opens a long-lived response; the caller must close its body and cancel ctx.
+func (c *Client) Stream(ctx context.Context, path string, headers ...string) *http.Response {
+	c.t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.api.Server.URL+"/api/v1"+path, nil)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	for _, header := range headers {
+		key, value, _ := strings.Cut(header, ":")
+		req.Header.Set(strings.TrimSpace(key), strings.TrimSpace(value))
+	}
+	response, err := c.http.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return response
+}
 
 func (w testWriter) Write(p []byte) (int, error) {
 	w.t.Log(strings.TrimRight(string(p), "\n"))

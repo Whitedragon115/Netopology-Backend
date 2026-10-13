@@ -10,3 +10,6 @@
 - WP-13: audit cursors contain `(created_at, id)` so timestamp ties cannot skip rows; `action` matches an exact permission key or a prefix ending in `.`. Invalid cursors are validation failures. Reads produce no audit writes.
 - WP-13 validation completed: `go tool task check` passed with PostgreSQL 18 integration tests, including pagination, all filters, admin/owner reads, editor/viewer denial and non-member hiding.
 - WP-11: use Huma's streaming response callback with an explicit contract SSE string schema. The bundled SSE sender only supports integer IDs, whereas this contract requires UUID event IDs.
+- WP-11: subscribe before replay; paginate replay in batches of 500. Do not discard live notifications by UUID ordering, because concurrent transactions can commit out of order. Recheck membership and canvas access for every event and heartbeat.
+- WP-11: deleted resources cannot be re-read. Editors receive deletion IDs only if the outbox records a canvas they currently can read; otherwise omit them. Empty canvas IDs mean workspace-wide events, as specified by the outbox API.
+- WP-11 validation completed: full check passed with PostgreSQL 18 integration tests for commit versus rollback notifications, viewer redaction, editor visibility, canvas access filtering and Last-Event-ID replay.
