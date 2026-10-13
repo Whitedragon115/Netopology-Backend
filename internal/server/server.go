@@ -134,7 +134,7 @@ func features(d Deps) []featureHandler {
 		member.NewHandler(memberService),
 		inventory.NewHandler(inventoryService),
 		canvas.NewHandler(canvasService),
-		share.NewHandler(share.NewService(d.DB, az)),
+		share.NewHandler(share.NewService(d.DB, az, d.Config, canvasService)),
 		events.NewHandler(events.NewService(d.DB, az, d.Broker, inventoryService, canvasReader, memberReader)),
 		audit.NewHandler(audit.NewService(d.DB, az)),
 	}

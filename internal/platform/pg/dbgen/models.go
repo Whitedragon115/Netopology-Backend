@@ -198,18 +198,19 @@ type Session struct {
 }
 
 type ShareLink struct {
-	ID           uuid.UUID
-	WorkspaceID  uuid.UUID
-	CanvasID     uuid.UUID
-	Label        string
-	TokenHash    []byte
-	PasswordHash *string
-	ExpiresAt    *time.Time
-	RevokedAt    *time.Time
-	CreatedBy    *uuid.UUID
-	CreatedAt    time.Time
-	LastUsedAt   *time.Time
-	UseCount     int64
+	ID              uuid.UUID
+	WorkspaceID     uuid.UUID
+	CanvasID        uuid.UUID
+	Label           string
+	TokenHash       []byte
+	PasswordHash    *string
+	ExpiresAt       *time.Time
+	RevokedAt       *time.Time
+	CreatedBy       *uuid.UUID
+	CreatedAt       time.Time
+	LastUsedAt      *time.Time
+	UseCount        int64
+	PasswordVersion int64
 }
 
 type User struct {

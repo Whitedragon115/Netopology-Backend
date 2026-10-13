@@ -31,6 +31,7 @@ import (
 // InventoryReader is supplied by the server; canvas depends only on shared wire models.
 type InventoryReader interface {
 	ReadForActor(context.Context, *dbgen.Queries, *authz.Actor, apimodel.IDs) (apimodel.Snapshot, error)
+	ReadForGuest(context.Context, *dbgen.Queries, apimodel.IDs) (apimodel.Snapshot, error)
 }
 
 // Service holds the business rules and AUTHORIZATION of this feature. Every exported method takes

@@ -29,8 +29,8 @@ type Area struct {
 	Color       string     `json:"color" enum:"yellow,teal,violet,rose,blue,green,gray" required:"false"`
 	NodeCount   int64      `json:"nodeCount,omitempty" required:"false"`
 	Health      *string    `json:"health,omitempty" required:"false"`
-	CIDR        *string    `json:"cidr" required:"false"`
-	VlanID      *int32     `json:"vlanId" required:"false"`
+	CIDR        *string    `json:"cidr,omitempty" required:"false"`
+	VlanID      *int32     `json:"vlanId,omitempty" required:"false"`
 	Description string     `json:"description"`
 	Properties  []Field    `json:"properties"`
 	CreatedAt   time.Time  `json:"createdAt"`

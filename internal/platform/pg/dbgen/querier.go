@@ -25,6 +25,7 @@ type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	// Sessions (internal/auth). The cookie holds a random token; only its SHA-256 is stored.
 	CreateSession(ctx context.Context, arg CreateSessionParams) (uuid.UUID, error)
+	CreateShareLink(ctx context.Context, arg CreateShareLinkParams) (ShareLink, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Workspaces and members (internal/workspace, internal/member; also used by internal/setup).
 	// workspaces and workspace_members have no RLS: the service checks membership first.
@@ -48,6 +49,7 @@ type Querier interface {
 	DemoteInstanceOwner(ctx context.Context, id uuid.UUID) error
 	EnsureAreaCanvas(ctx context.Context, arg EnsureAreaCanvasParams) (int64, error)
 	FindAreaStartingTab(ctx context.Context, arg FindAreaStartingTabParams) (FindAreaStartingTabRow, error)
+	GetActiveShareByToken(ctx context.Context, tokenHash []byte) (ShareLink, error)
 	GetActiveUserByEmail(ctx context.Context, email string) (User, error)
 	GetAreaCanvasRow(ctx context.Context, arg GetAreaCanvasRowParams) (Canvase, error)
 	GetAreaVisible(ctx context.Context, arg GetAreaVisibleParams) (GetAreaVisibleRow, error)
@@ -72,6 +74,7 @@ type Querier interface {
 	GetNoteVisible(ctx context.Context, arg GetNoteVisibleParams) (Note, error)
 	// Resolves a cookie to the signed-in user. Disabled users and expired sessions resolve to nothing.
 	GetSessionPrincipal(ctx context.Context, tokenHash []byte) (GetSessionPrincipalRow, error)
+	GetShareLink(ctx context.Context, arg GetShareLinkParams) (ShareLink, error)
 	// Accounts (internal/auth, internal/account, internal/setup).
 	// users has no RLS: it is the access-control layer. The service decides who may read what.
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
@@ -122,12 +125,14 @@ type Querier interface {
 	ListNodeUsageCanvases(ctx context.Context, arg ListNodeUsageCanvasesParams) ([]ListNodeUsageCanvasesRow, error)
 	ListNodesVisible(ctx context.Context, arg ListNodesVisibleParams) ([]Node, error)
 	ListNotesVisible(ctx context.Context, arg ListNotesVisibleParams) ([]Note, error)
+	ListShareLinks(ctx context.Context, arg ListShareLinksParams) ([]ShareLink, error)
 	// All canvas data queries run inside pg.InWorkspace and filter workspace_id.
 	ListTabCanvases(ctx context.Context, arg ListTabCanvasesParams) ([]Canvase, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Resume after Last-Event-ID (UUIDv7 ids sort by time).
 	ListWorkspaceEventsAfter(ctx context.Context, arg ListWorkspaceEventsAfterParams) ([]WorkspaceEvent, error)
 	ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspacesForUserRow, error)
+	LockActiveShareLink(ctx context.Context, arg LockActiveShareLinkParams) (ShareLink, error)
 	LockArea(ctx context.Context, arg LockAreaParams) (Area, error)
 	LockCanvasRow(ctx context.Context, arg LockCanvasRowParams) (Canvase, error)
 	LockLink(ctx context.Context, arg LockLinkParams) (Link, error)
@@ -140,9 +145,11 @@ type Querier interface {
 	NodeExists(ctx context.Context, arg NodeExistsParams) (bool, error)
 	NodeSlugExists(ctx context.Context, arg NodeSlugExistsParams) (bool, error)
 	PruneWorkspaceEvents(ctx context.Context, keepHours int32) (int64, error)
+	RecordShareUse(ctx context.Context, arg RecordShareUseParams) (ShareLink, error)
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
 	ReparentCanvasNode(ctx context.Context, arg ReparentCanvasNodeParams) error
 	ReplaceCanvasGrants(ctx context.Context, arg ReplaceCanvasGrantsParams) error
+	RevokeShareLink(ctx context.Context, arg RevokeShareLinkParams) (ShareLink, error)
 	SeedAreaCanvasAreas(ctx context.Context, arg SeedAreaCanvasAreasParams) error
 	SeedAreaCanvasNodes(ctx context.Context, arg SeedAreaCanvasNodesParams) error
 	SetCanvasLock(ctx context.Context, arg SetCanvasLockParams) (Canvase, error)
@@ -164,6 +171,7 @@ type Querier interface {
 	UpdateMember(ctx context.Context, arg UpdateMemberParams) (int64, error)
 	UpdateNodeInventory(ctx context.Context, arg UpdateNodeInventoryParams) (Node, error)
 	UpdateNoteInventory(ctx context.Context, arg UpdateNoteInventoryParams) (Note, error)
+	UpdateShareLink(ctx context.Context, arg UpdateShareLinkParams) (ShareLink, error)
 	UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error)
 	UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams) (Workspace, error)
 	UpsertCanvasLinkOverride(ctx context.Context, arg UpsertCanvasLinkOverrideParams) error
