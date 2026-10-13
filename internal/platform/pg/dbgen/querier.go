@@ -105,6 +105,7 @@ type Querier interface {
 	ListAreaChildAreas(ctx context.Context, arg ListAreaChildAreasParams) ([]uuid.UUID, error)
 	ListAreaChildNodes(ctx context.Context, arg ListAreaChildNodesParams) ([]uuid.UUID, error)
 	ListAreasVisible(ctx context.Context, arg ListAreasVisibleParams) ([]ListAreasVisibleRow, error)
+	ListAuditEntries(ctx context.Context, arg ListAuditEntriesParams) ([]ListAuditEntriesRow, error)
 	ListCanvasLinkOverrides(ctx context.Context, arg ListCanvasLinkOverridesParams) ([]Placement, error)
 	ListCanvasPlacements(ctx context.Context, arg ListCanvasPlacementsParams) ([]Placement, error)
 	ListCanvasShapes(ctx context.Context, arg ListCanvasShapesParams) ([]CanvasShape, error)

@@ -121,6 +121,27 @@ components:
             - disabled
           type: string
       type: object
+    Actor:
+      additionalProperties: false
+      properties:
+        displayName:
+          type:
+            - string
+            - "null"
+        id:
+          type: string
+        type:
+          enum:
+            - user
+            - share_link
+            - system
+            - workflow
+          type: string
+      required:
+        - type
+        - id
+        - displayName
+      type: object
     Area:
       additionalProperties: false
       properties:
@@ -287,6 +308,50 @@ components:
           maximum: 4094
           minimum: 1
           type: integer
+      type: object
+    AuditEntry:
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+        actor:
+          $ref: "#/components/schemas/Actor"
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          type: string
+        ip:
+          type:
+            - string
+            - "null"
+        metadata:
+          additionalProperties: {}
+          type: object
+        target:
+          $ref: "#/components/schemas/Target"
+      required:
+        - id
+        - actor
+        - action
+        - target
+        - metadata
+        - ip
+        - createdAt
+      type: object
+    AuditPage:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+          type: array
+        nextCursor:
+          type:
+            - string
+            - "null"
+      required:
+        - items
       type: object
     AuthProviders:
       additionalProperties: false
@@ -1587,6 +1652,17 @@ components:
         - zIndex
         - style
         - data
+      type: object
+    Target:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+      required:
+        - type
+        - id
       type: object
     User:
       additionalProperties: false
@@ -3113,6 +3189,89 @@ paths:
       tags:
         - Areas
       x-permission: area.canvas
+  /workspaces/{wsId}/audit-log:
+    get:
+      operationId: listAuditLog
+      parameters:
+        - in: path
+          name: wsId
+          required: true
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - explode: false
+          in: query
+          name: actorId
+          schema:
+            format: uuid
+            type: string
+        - description: Exact key or prefix, e.g. node.
+          explode: false
+          in: query
+          name: action
+          schema:
+            description: Exact key or prefix, e.g. node.
+            type: string
+        - explode: false
+          in: query
+          name: targetId
+          schema:
+            format: uuid
+            type: string
+        - explode: false
+          in: query
+          name: since
+          schema:
+            format: date-time
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditPage"
+          description: OK
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: Internal Server Error
+      summary: Who did what, newest first
+      tags:
+        - Audit
+      x-permission: audit.list
   /workspaces/{wsId}/canvases:
     get:
       operationId: listCanvases
