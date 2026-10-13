@@ -8,7 +8,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | WP | Title | Depends on | State |
 |---|---|---|---|
 | 01 | Platform, environment, reference feature (setup) | — | ✅ done (architect) |
-| 02 | Full stack in Docker (parent repo compose) | 01 | 🟡 files done, both images build; first `docker compose up` on a local engine still to verify |
+| 02 | Full stack in Docker (parent repo compose) | 01 | 🟡 isolated remote full stack verified; local Docker Desktop startup blocked (see DOCKER_VALIDATION.md) |
 | 03 | Password sign-in, logout, providers, `getMe` | 01 | ✅ done |
 | 04 | Accounts: `/me`, `/users`, instance settings | 03 | ✅ done |
 | 05 | Google + Discord sign-in and linking | 04 | ✅ done |
