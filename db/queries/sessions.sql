@@ -26,5 +26,8 @@ DELETE FROM sessions WHERE id = $1;
 -- Password reset, account disabled: end every session of that user.
 DELETE FROM sessions WHERE user_id = $1;
 
+-- name: DeleteOtherUserSessions :execrows
+DELETE FROM sessions WHERE user_id = $1 AND id <> $2;
+
 -- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at <= now();

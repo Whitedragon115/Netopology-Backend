@@ -11,6 +11,7 @@ import (
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/crypto"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/httpx"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/pg/dbgen"
+	"github.com/Whitedragon115/Netopology-Backend/internal/platform/settings"
 )
 
 // Sessions issues and ends sessions. Other features (setup, OAuth callback) use it through the
@@ -37,7 +38,11 @@ func (s *Sessions) Start(ctx context.Context, q *dbgen.Queries, userID uuid.UUID
 	if err != nil {
 		return http.Cookie{}, err
 	}
-	ttl := sessionLifetime(s.TTL, remember)
+	baseTTL, err := settings.SessionTTL(ctx, q, s.TTL)
+	if err != nil {
+		return http.Cookie{}, fmt.Errorf("read session TTL: %w", err)
+	}
+	ttl := sessionLifetime(baseTTL, remember)
 	c := httpx.ClientFrom(ctx)
 	params := dbgen.CreateSessionParams{UserID: userID, TokenHash: crypto.HashToken(token), ExpiresAt: time.Now().Add(ttl), Remember: remember}
 	if c.IP.IsValid() {

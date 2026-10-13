@@ -11,6 +11,7 @@ import (
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/logging"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/pg"
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/pg/dbgen"
+	"github.com/Whitedragon115/Netopology-Backend/internal/platform/settings"
 )
 
 // Middleware resolves the session cookie to an authz.Principal for every request. It never
@@ -37,13 +38,18 @@ func Middleware(db *pg.DB, ttl time.Duration, cookies httpx.Cookies, log *slog.L
 			}
 			// sliding expiry, written at most once a minute per session
 			if time.Since(row.LastSeenAt) > time.Minute {
-				lifetime := sessionLifetime(ttl, row.Remember)
-				if err := db.Q().TouchSession(ctx, dbgen.TouchSessionParams{ID: row.SessionID, ExpiresAt: time.Now().Add(lifetime)}); err != nil {
-					log.WarnContext(ctx, "touch session", "err", err)
-				} else if row.Remember {
-					// The browser expiry must slide alongside the server-side expiry.
-					cookie := cookies.Session(ck.Value, lifetime, true)
-					http.SetCookie(w, &cookie)
+				baseTTL, settingErr := settings.SessionTTL(ctx, db.Q(), ttl)
+				if settingErr != nil {
+					log.WarnContext(ctx, "read session TTL", "err", settingErr)
+				} else {
+					lifetime := sessionLifetime(baseTTL, row.Remember)
+					if err := db.Q().TouchSession(ctx, dbgen.TouchSessionParams{ID: row.SessionID, ExpiresAt: time.Now().Add(lifetime)}); err != nil {
+						log.WarnContext(ctx, "touch session", "err", err)
+					} else if row.Remember {
+						// The browser expiry must slide alongside the server-side expiry.
+						cookie := cookies.Session(ck.Value, lifetime, true)
+						http.SetCookie(w, &cookie)
+					}
 				}
 			}
 			p := &authz.Principal{

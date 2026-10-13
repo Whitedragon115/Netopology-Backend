@@ -6,11 +6,13 @@ package dbgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
 
 type Querier interface {
+	CountUserIdentities(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Feature: setup (internal/setup). Reference implementation, see docs/ARCHITECTURE.md §12.
 	CountUsers(ctx context.Context) (int64, error)
 	// Sessions (internal/auth). The cookie holds a random token; only its SHA-256 is stored.
@@ -20,9 +22,18 @@ type Querier interface {
 	// workspaces and workspace_members have no RLS: the service checks membership first.
 	CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams) (Workspace, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) (int64, error)
 	DeleteSession(ctx context.Context, id uuid.UUID) error
 	// Password reset, account disabled: end every session of that user.
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
+	DemoteInstanceOwner(ctx context.Context, id uuid.UUID) error
+	GetActiveUserByEmail(ctx context.Context, email string) (User, error)
+	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (UserIdentity, error)
+	GetIdentityForUser(ctx context.Context, arg GetIdentityForUserParams) (UserIdentity, error)
+	GetIdentityForUserProvider(ctx context.Context, arg GetIdentityForUserProviderParams) (UserIdentity, error)
+	GetInstanceOwnerForUpdate(ctx context.Context) (User, error)
+	// Instance settings are not workspace scoped. Services authorize all access.
+	GetInstanceSetting(ctx context.Context, key string) (json.RawMessage, error)
 	// Authorization lookups (internal/authz). Used by every workspace-scoped request.
 	// workspace_members has no RLS (it decides access). No row = not a member = 404.
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
@@ -32,29 +43,38 @@ type Querier interface {
 	// users has no RLS: it is the access-control layer. The service decides who may read what.
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
 	GetWorkspaceEvent(ctx context.Context, arg GetWorkspaceEventParams) (WorkspaceEvent, error)
+	HasManagerMembership(ctx context.Context, userID uuid.UUID) (bool, error)
+	HasRecentProviderSignIn(ctx context.Context, arg HasRecentProviderSignInParams) (bool, error)
 	// Cross-cutting writes done in the same transaction as the change they describe.
 	// audit_log is append-only (a trigger blocks UPDATE). action = the permission key.
 	InsertAuditEntry(ctx context.Context, arg InsertAuditEntryParams) error
 	InsertMember(ctx context.Context, arg InsertMemberParams) error
 	// Must run inside pg.InWorkspace (RLS). Notifies listeners on commit.
 	InsertWorkspaceEvent(ctx context.Context, arg InsertWorkspaceEventParams) (uuid.UUID, error)
+	LinkIdentity(ctx context.Context, arg LinkIdentityParams) (UserIdentity, error)
 	// Editors only. canvas_grants has RLS: call inside pg.InWorkspace.
 	ListGrantedCanvasIDs(ctx context.Context, arg ListGrantedCanvasIDsParams) ([]uuid.UUID, error)
-	// TODO(WP-04): ListUsers (cursor), UpdateUser, SetUserPassword, LookupUserByUsername,
-	//              identities: ListIdentities, GetIdentityByProviderSubject, LinkIdentity, UnlinkIdentity,
-	//              GetActiveUserByEmail (for oauthAutoLinkByEmail).
+	ListIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
 	// For Account.identities.
 	ListIdentityProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Resume after Last-Event-ID (UUIDv7 ids sort by time).
 	ListWorkspaceEventsAfter(ctx context.Context, arg ListWorkspaceEventsAfterParams) ([]WorkspaceEvent, error)
+	LookupUserByUsername(ctx context.Context, username string) (LookupUserByUsernameRow, error)
 	PruneWorkspaceEvents(ctx context.Context, keepHours int32) (int64, error)
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
 	SetUserLastLogin(ctx context.Context, id uuid.UUID) error
+	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error
+	TouchIdentity(ctx context.Context, id uuid.UUID) error
 	// Sliding expiry. Called at most once per minute per session (see auth.Middleware).
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	// Serializes concurrent completeSetup calls inside one transaction (released at commit).
 	TryLockSetup(ctx context.Context) (bool, error)
+	UnlinkIdentity(ctx context.Context, arg UnlinkIdentityParams) (int64, error)
+	UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error)
+	UpsertInstanceSetting(ctx context.Context, arg UpsertInstanceSettingParams) error
 }
 
 var _ Querier = (*Queries)(nil)

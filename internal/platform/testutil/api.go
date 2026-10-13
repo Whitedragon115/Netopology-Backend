@@ -158,6 +158,16 @@ func (a *API) Login(username, password string) *Client {
 	return c
 }
 
+// CreateUser adds an account through the API and returns its own signed-in browser.
+// Call Owner first so the server owner exists.
+func (a *API) CreateUser(username, role string) *Client {
+	const password = "fixture-password-123"
+	a.Login("owner", "owner-password-123").Do(http.MethodPost, "/users", map[string]any{
+		"username": username, "password": password, "instanceRole": role,
+	}).Expect(a.t, http.StatusCreated)
+	return a.Login(username, password)
+}
+
 type testWriter struct{ t testing.TB }
 
 func (w testWriter) Write(p []byte) (int, error) {

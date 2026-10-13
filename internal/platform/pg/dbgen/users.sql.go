@@ -11,6 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const countUserIdentities = `-- name: CountUserIdentities :one
+SELECT count(*) FROM user_identities WHERE user_id = $1
+`
+
+func (q *Queries) CountUserIdentities(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserIdentities, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (username, email, display_name, password_hash, instance_role)
 VALUES ($1, $2, $3, $4, $5)
@@ -33,6 +44,134 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.PasswordHash,
 		arg.InstanceRole,
 	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.InstanceRole,
+		&i.Status,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const demoteInstanceOwner = `-- name: DemoteInstanceOwner :exec
+UPDATE users SET instance_role = 'admin' WHERE id = $1 AND instance_role = 'owner'
+`
+
+func (q *Queries) DemoteInstanceOwner(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, demoteInstanceOwner, id)
+	return err
+}
+
+const getActiveUserByEmail = `-- name: GetActiveUserByEmail :one
+SELECT id, username, email, display_name, password_hash, instance_role, status, last_login_at, created_at, updated_at FROM users WHERE lower(email) = lower($1) AND status = 'active'
+`
+
+func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.InstanceRole,
+		&i.Status,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getIdentityByProviderSubject = `-- name: GetIdentityByProviderSubject :one
+SELECT id, user_id, provider, subject, email, display_name, created_at, last_used_at FROM user_identities WHERE provider = $1 AND subject = $2
+`
+
+type GetIdentityByProviderSubjectParams struct {
+	Provider string
+	Subject  string
+}
+
+func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (UserIdentity, error) {
+	row := q.db.QueryRow(ctx, getIdentityByProviderSubject, arg.Provider, arg.Subject)
+	var i UserIdentity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.Subject,
+		&i.Email,
+		&i.DisplayName,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getIdentityForUser = `-- name: GetIdentityForUser :one
+SELECT id, user_id, provider, subject, email, display_name, created_at, last_used_at FROM user_identities WHERE id = $1 AND user_id = $2
+`
+
+type GetIdentityForUserParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetIdentityForUser(ctx context.Context, arg GetIdentityForUserParams) (UserIdentity, error) {
+	row := q.db.QueryRow(ctx, getIdentityForUser, arg.ID, arg.UserID)
+	var i UserIdentity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.Subject,
+		&i.Email,
+		&i.DisplayName,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getIdentityForUserProvider = `-- name: GetIdentityForUserProvider :one
+SELECT id, user_id, provider, subject, email, display_name, created_at, last_used_at FROM user_identities WHERE user_id = $1 AND provider = $2
+`
+
+type GetIdentityForUserProviderParams struct {
+	UserID   uuid.UUID
+	Provider string
+}
+
+func (q *Queries) GetIdentityForUserProvider(ctx context.Context, arg GetIdentityForUserProviderParams) (UserIdentity, error) {
+	row := q.db.QueryRow(ctx, getIdentityForUserProvider, arg.UserID, arg.Provider)
+	var i UserIdentity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.Subject,
+		&i.Email,
+		&i.DisplayName,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getInstanceOwnerForUpdate = `-- name: GetInstanceOwnerForUpdate :one
+SELECT id, username, email, display_name, password_hash, instance_role, status, last_login_at, created_at, updated_at FROM users WHERE instance_role = 'owner' FOR UPDATE
+`
+
+func (q *Queries) GetInstanceOwnerForUpdate(ctx context.Context) (User, error) {
+	row := q.db.QueryRow(ctx, getInstanceOwnerForUpdate)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -96,16 +235,133 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
-const listIdentityProviders = `-- name: ListIdentityProviders :many
+const getUserForUpdate = `-- name: GetUserForUpdate :one
+SELECT id, username, email, display_name, password_hash, instance_role, status, last_login_at, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+`
 
+func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserForUpdate, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.InstanceRole,
+		&i.Status,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const hasManagerMembership = `-- name: HasManagerMembership :one
+SELECT EXISTS (SELECT 1 FROM workspace_members
+  WHERE user_id = $1 AND role IN ('owner', 'admin'))
+`
+
+func (q *Queries) HasManagerMembership(ctx context.Context, userID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasManagerMembership, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasRecentProviderSignIn = `-- name: HasRecentProviderSignIn :one
+SELECT EXISTS (
+  SELECT 1 FROM sessions s JOIN user_identities i ON i.user_id = s.user_id
+  WHERE s.id = $1 AND s.user_id = $2
+    AND s.created_at >= now() - interval '10 minutes'
+    AND i.last_used_at >= s.created_at
+)
+`
+
+type HasRecentProviderSignInParams struct {
+	SessionID uuid.UUID
+	UserID    uuid.UUID
+}
+
+func (q *Queries) HasRecentProviderSignIn(ctx context.Context, arg HasRecentProviderSignInParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasRecentProviderSignIn, arg.SessionID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const linkIdentity = `-- name: LinkIdentity :one
+INSERT INTO user_identities (user_id, provider, subject, email, display_name, last_used_at)
+VALUES ($1, $2, $3, $4, $5, now()) RETURNING id, user_id, provider, subject, email, display_name, created_at, last_used_at
+`
+
+type LinkIdentityParams struct {
+	UserID      uuid.UUID
+	Provider    string
+	Subject     string
+	Email       *string
+	DisplayName *string
+}
+
+func (q *Queries) LinkIdentity(ctx context.Context, arg LinkIdentityParams) (UserIdentity, error) {
+	row := q.db.QueryRow(ctx, linkIdentity,
+		arg.UserID,
+		arg.Provider,
+		arg.Subject,
+		arg.Email,
+		arg.DisplayName,
+	)
+	var i UserIdentity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.Subject,
+		&i.Email,
+		&i.DisplayName,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const listIdentities = `-- name: ListIdentities :many
+SELECT id, user_id, provider, subject, email, display_name, created_at, last_used_at FROM user_identities WHERE user_id = $1 ORDER BY created_at, id
+`
+
+func (q *Queries) ListIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error) {
+	rows, err := q.db.Query(ctx, listIdentities, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserIdentity{}
+	for rows.Next() {
+		var i UserIdentity
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.Subject,
+			&i.Email,
+			&i.DisplayName,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdentityProviders = `-- name: ListIdentityProviders :many
 SELECT provider FROM user_identities WHERE user_id = $1 ORDER BY provider
 `
 
-// TODO(WP-04): ListUsers (cursor), UpdateUser, SetUserPassword, LookupUserByUsername,
-//
-//	identities: ListIdentities, GetIdentityByProviderSubject, LinkIdentity, UnlinkIdentity,
-//	GetActiveUserByEmail (for oauthAutoLinkByEmail).
-//
 // For Account.identities.
 func (q *Queries) ListIdentityProviders(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	rows, err := q.db.Query(ctx, listIdentityProviders, userID)
@@ -125,6 +381,69 @@ func (q *Queries) ListIdentityProviders(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, username, email, display_name, password_hash, instance_role, status, last_login_at, created_at, updated_at FROM users
+WHERE id > $1::uuid
+  AND ($2::text = '' OR username ILIKE '%' || $2::text || '%'
+       OR display_name ILIKE '%' || $2::text || '%')
+ORDER BY id LIMIT $3::int
+`
+
+type ListUsersParams struct {
+	After     uuid.UUID
+	Search    string
+	PageLimit int32
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers, arg.After, arg.Search, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Email,
+			&i.DisplayName,
+			&i.PasswordHash,
+			&i.InstanceRole,
+			&i.Status,
+			&i.LastLoginAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lookupUserByUsername = `-- name: LookupUserByUsername :one
+SELECT id, username, display_name FROM users
+WHERE lower(username) = lower($1) AND status = 'active'
+`
+
+type LookupUserByUsernameRow struct {
+	ID          uuid.UUID
+	Username    string
+	DisplayName string
+}
+
+func (q *Queries) LookupUserByUsername(ctx context.Context, username string) (LookupUserByUsernameRow, error) {
+	row := q.db.QueryRow(ctx, lookupUserByUsername, username)
+	var i LookupUserByUsernameRow
+	err := row.Scan(&i.ID, &i.Username, &i.DisplayName)
+	return i, err
 }
 
 const rehashUserPassword = `-- name: RehashUserPassword :execrows
@@ -153,4 +472,93 @@ UPDATE users SET last_login_at = now() WHERE id = $1
 func (q *Queries) SetUserLastLogin(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setUserLastLogin, id)
 	return err
+}
+
+const setUserPassword = `-- name: SetUserPassword :exec
+UPDATE users SET password_hash = $2 WHERE id = $1
+`
+
+type SetUserPasswordParams struct {
+	ID           uuid.UUID
+	PasswordHash *string
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, setUserPassword, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const touchIdentity = `-- name: TouchIdentity :exec
+UPDATE user_identities SET last_used_at = now() WHERE id = $1
+`
+
+func (q *Queries) TouchIdentity(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, touchIdentity, id)
+	return err
+}
+
+const unlinkIdentity = `-- name: UnlinkIdentity :execrows
+DELETE FROM user_identities WHERE id = $1 AND user_id = $2
+`
+
+type UnlinkIdentityParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) UnlinkIdentity(ctx context.Context, arg UnlinkIdentityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, unlinkIdentity, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateUserFields = `-- name: UpdateUserFields :one
+UPDATE users SET
+  display_name = CASE WHEN $1::boolean THEN $2::text ELSE display_name END,
+  email = CASE WHEN $3::boolean THEN $4::text ELSE email END,
+  status = CASE WHEN $5::boolean THEN $6::text ELSE status END,
+  instance_role = CASE WHEN $7::boolean THEN $8::text ELSE instance_role END
+WHERE id = $9 RETURNING id, username, email, display_name, password_hash, instance_role, status, last_login_at, created_at, updated_at
+`
+
+type UpdateUserFieldsParams struct {
+	SetDisplayName  bool
+	DisplayName     string
+	SetEmail        bool
+	Email           *string
+	SetStatus       bool
+	Status          string
+	SetInstanceRole bool
+	InstanceRole    string
+	UserID          uuid.UUID
+}
+
+func (q *Queries) UpdateUserFields(ctx context.Context, arg UpdateUserFieldsParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserFields,
+		arg.SetDisplayName,
+		arg.DisplayName,
+		arg.SetEmail,
+		arg.Email,
+		arg.SetStatus,
+		arg.Status,
+		arg.SetInstanceRole,
+		arg.InstanceRole,
+		arg.UserID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.InstanceRole,
+		&i.Status,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

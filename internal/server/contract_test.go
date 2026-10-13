@@ -146,7 +146,7 @@ func compareOp(t *testing.T, contract, gen, cop, gop map[string]any) {
 
 func compareSchema(t *testing.T, what string, contract, gen map[string]any, c, g schemaRef) {
 	t.Helper()
-	if c.name != g.name {
+	if c.name != "" && c.name != g.name {
 		t.Errorf("%s schema: contract %q, go %q (name the Go type like the contract schema)", what, c.name, g.name)
 		return
 	}
@@ -173,10 +173,20 @@ type schemaRef struct {
 func operations(doc map[string]any) map[string]map[string]any {
 	out := map[string]map[string]any{}
 	for path, item := range asMap(doc["paths"]) {
+		shared := asSlice(asMap(item)["parameters"])
 		for method, op := range asMap(item) {
 			switch method {
 			case "get", "post", "put", "patch", "delete":
-				out[strings.ToUpper(method)+" "+path] = asMap(op)
+				merged := map[string]any{}
+				for key, value := range asMap(op) {
+					merged[key] = value
+				}
+				if len(shared) > 0 {
+					params := append([]any{}, shared...)
+					params = append(params, asSlice(merged["parameters"])...)
+					merged["parameters"] = params
+				}
+				out[strings.ToUpper(method)+" "+path] = merged
 			}
 		}
 	}

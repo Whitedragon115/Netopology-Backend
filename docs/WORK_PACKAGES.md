@@ -10,7 +10,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | 01 | Platform, environment, reference feature (setup) | — | ✅ done (architect) |
 | 02 | Full stack in Docker (parent repo compose) | 01 | 🟡 files done, both images build; first `docker compose up` on a local engine still to verify |
 | 03 | Password sign-in, logout, providers, `getMe` | 01 | ✅ done |
-| 04 | Accounts: `/me`, `/users`, instance settings | 03 | ⏳ |
+| 04 | Accounts: `/me`, `/users`, instance settings | 03 | ✅ done |
 | 05 | Google + Discord sign-in and linking | 04 | ⏳ |
 | 06 | Workspaces | 03 | ⏳ |
 | 07 | Members and canvas grants | 06 | ⏳ |
