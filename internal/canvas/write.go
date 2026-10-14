@@ -15,8 +15,8 @@ import (
 	"github.com/Whitedragon115/Netopology-Backend/internal/platform/pg/dbgen"
 )
 
-func canvasChange(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, action authz.Permission, event events.Type, id uuid.UUID) error {
-	if err := auditlog.Write(ctx, q, auditlog.Entry{WorkspaceID: &actor.WorkspaceID, Action: action, TargetType: "canvas", TargetID: &id}); err != nil {
+func canvasChange(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, action authz.Permission, event events.Type, id uuid.UUID, name string) error {
+	if err := auditlog.Write(ctx, q, auditlog.Entry{WorkspaceID: &actor.WorkspaceID, Action: action, TargetType: "canvas", TargetID: &id, Metadata: map[string]any{"name": name}}); err != nil {
 		return err
 	}
 	return events.Emit(ctx, q, events.Change{WorkspaceID: actor.WorkspaceID, Type: event, SubjectID: &id, CanvasIDs: []uuid.UUID{id}})
@@ -61,7 +61,7 @@ func (s *Service) CanvasCreate(ctx context.Context, wsID uuid.UUID, req CanvasCr
 		if err != nil {
 			return err
 		}
-		return canvasChange(ctx, q, actor, authz.CanvasCreate, events.CanvasCreated, row.ID)
+		return canvasChange(ctx, q, actor, authz.CanvasCreate, events.CanvasCreated, row.ID, row.Name)
 	})
 	return out, canvasError(err)
 }
@@ -131,7 +131,7 @@ func (s *Service) CanvasUpdate(ctx context.Context, wsID, id uuid.UUID, req Canv
 		if err != nil {
 			return err
 		}
-		return canvasChange(ctx, q, actor, authz.CanvasUpdate, events.CanvasUpdated, id)
+		return canvasChange(ctx, q, actor, authz.CanvasUpdate, events.CanvasUpdated, id, updated.Name)
 	})
 	return out, canvasError(err)
 }
@@ -162,7 +162,7 @@ func (s *Service) Delete(ctx context.Context, wsID, id uuid.UUID, match *int32) 
 		if count != 1 {
 			return apperr.PreconditionFailed()
 		}
-		return canvasChange(ctx, q, actor, authz.CanvasDelete, events.CanvasDeleted, id)
+		return canvasChange(ctx, q, actor, authz.CanvasDelete, events.CanvasDeleted, id, row.Name)
 	})
 	return err
 }
@@ -208,7 +208,7 @@ func (s *Service) GetAreaView(ctx context.Context, wsID, areaID uuid.UUID) (Canv
 			if err := q.SeedAreaCanvasAreas(ctx, dbgen.SeedAreaCanvasAreasParams{WorkspaceID: wsID, AreaID: &areaID, CanvasID: row.ID}); err != nil {
 				return err
 			}
-			if err := canvasChange(ctx, q, actor, authz.AreaCanvas, events.CanvasCreated, row.ID); err != nil {
+			if err := canvasChange(ctx, q, actor, authz.AreaCanvas, events.CanvasCreated, row.ID, row.Name); err != nil {
 				return err
 			}
 		}

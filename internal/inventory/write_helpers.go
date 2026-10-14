@@ -186,7 +186,7 @@ func usedElsewhere(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, ki
 	return nil
 }
 
-func recordInventoryChange(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, permission authz.Permission, kind string, event events.Type, id uuid.UUID, canvasIDs []uuid.UUID) error {
+func recordInventoryChange(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, permission authz.Permission, kind string, event events.Type, id uuid.UUID, name string, canvasIDs []uuid.UUID) error {
 	if canvasIDs == nil {
 		var err error
 		canvasIDs, err = q.InventoryCanvasIDs(ctx, dbgen.InventoryCanvasIDsParams{WorkspaceID: actor.WorkspaceID, Kind: kind, ID: &id})
@@ -194,7 +194,7 @@ func recordInventoryChange(ctx context.Context, q *dbgen.Queries, actor *authz.A
 			return err
 		}
 	}
-	if err := auditlog.Write(ctx, q, auditlog.Entry{WorkspaceID: &actor.WorkspaceID, Action: permission, TargetType: kind, TargetID: &id}); err != nil {
+	if err := auditlog.Write(ctx, q, auditlog.Entry{WorkspaceID: &actor.WorkspaceID, Action: permission, TargetType: kind, TargetID: &id, Metadata: map[string]any{"name": name}}); err != nil {
 		return err
 	}
 	return events.Emit(ctx, q, events.Change{WorkspaceID: actor.WorkspaceID, Type: event, SubjectID: &id, CanvasIDs: canvasIDs})

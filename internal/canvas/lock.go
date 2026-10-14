@@ -49,7 +49,7 @@ func (s *Service) SetLock(ctx context.Context, wsID, id uuid.UUID, locked bool) 
 		if err != nil {
 			return err
 		}
-		return canvasChange(ctx, q, actor, permission, events.CanvasUpdated, id)
+		return canvasChange(ctx, q, actor, permission, events.CanvasUpdated, id, row.Name)
 	})
 	return out, err
 }

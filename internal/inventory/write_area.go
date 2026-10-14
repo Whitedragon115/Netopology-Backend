@@ -31,6 +31,7 @@ func (s *Service) CreateArea(ctx context.Context, wsID uuid.UUID, req AreaCreate
 		return Area{}, err
 	}
 	var id uuid.UUID
+	var out Area
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -63,12 +64,16 @@ func (s *Service) CreateArea(ctx context.Context, wsID uuid.UUID, req AreaCreate
 		if err := insertPlaceOn(ctx, q, wsID, req.PlaceOn, "area", id); err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.AreaCreate, "area", events.AreaCreated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.AreaCreate, "area", events.AreaCreated, id, row.Name, nil); err != nil {
+			return err
+		}
+		out, err = readArea(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Area{}, inventoryWriteError(err)
 	}
-	return s.GetArea(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) UpdateArea(ctx context.Context, wsID, id uuid.UUID, req AreaUpdate, match *int32) (Area, error) {
@@ -79,6 +84,7 @@ func (s *Service) UpdateArea(ctx context.Context, wsID, id uuid.UUID, req AreaUp
 	if !req.hasChange() {
 		return Area{}, apperr.Invalid(apperr.CodeValidation, "At least one field is required.")
 	}
+	var out Area
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -143,12 +149,16 @@ func (s *Service) UpdateArea(ctx context.Context, wsID, id uuid.UUID, req AreaUp
 		if err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.AreaUpdate, "area", events.AreaUpdated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.AreaUpdate, "area", events.AreaUpdated, id, current.Name, nil); err != nil {
+			return err
+		}
+		out, err = readArea(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Area{}, inventoryWriteError(err)
 	}
-	return s.GetArea(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) DeleteArea(ctx context.Context, wsID, id uuid.UUID, match *int32) error {
@@ -188,7 +198,7 @@ func (s *Service) DeleteArea(ctx context.Context, wsID, id uuid.UUID, match *int
 		if count != 1 {
 			return apperr.PreconditionFailed()
 		}
-		return recordInventoryChange(ctx, q, actor, authz.AreaDelete, "area", events.AreaDeleted, id, canvases)
+		return recordInventoryChange(ctx, q, actor, authz.AreaDelete, "area", events.AreaDeleted, id, current.Name, canvases)
 	})
 	return inventoryWriteError(err)
 }

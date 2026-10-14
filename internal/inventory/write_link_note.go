@@ -25,6 +25,7 @@ func (s *Service) CreateLink(ctx context.Context, wsID uuid.UUID, req LinkCreate
 		return Link{}, err
 	}
 	var id uuid.UUID
+	var out Link
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -54,12 +55,16 @@ func (s *Service) CreateLink(ctx context.Context, wsID uuid.UUID, req LinkCreate
 			return err
 		}
 		id = row.ID
-		return recordInventoryChange(ctx, q, actor, authz.LinkCreate, "link", events.LinkCreated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.LinkCreate, "link", events.LinkCreated, id, row.Label, nil); err != nil {
+			return err
+		}
+		out, err = readLink(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Link{}, inventoryWriteError(err)
 	}
-	return s.GetLink(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) UpdateLink(ctx context.Context, wsID, id uuid.UUID, req LinkUpdate, match *int32) (Link, error) {
@@ -70,6 +75,7 @@ func (s *Service) UpdateLink(ctx context.Context, wsID, id uuid.UUID, req LinkUp
 	if !req.hasChange() {
 		return Link{}, apperr.Invalid(apperr.CodeValidation, "At least one field is required.")
 	}
+	var out Link
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -117,12 +123,16 @@ func (s *Service) UpdateLink(ctx context.Context, wsID, id uuid.UUID, req LinkUp
 		if err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.LinkUpdate, "link", events.LinkUpdated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.LinkUpdate, "link", events.LinkUpdated, id, current.Label, nil); err != nil {
+			return err
+		}
+		out, err = readLink(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Link{}, inventoryWriteError(err)
 	}
-	return s.GetLink(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) DeleteLink(ctx context.Context, wsID, id uuid.UUID, match *int32) error {
@@ -159,7 +169,7 @@ func (s *Service) DeleteLink(ctx context.Context, wsID, id uuid.UUID, match *int
 		if count != 1 {
 			return apperr.PreconditionFailed()
 		}
-		return recordInventoryChange(ctx, q, actor, authz.LinkDelete, "link", events.LinkDeleted, id, canvases)
+		return recordInventoryChange(ctx, q, actor, authz.LinkDelete, "link", events.LinkDeleted, id, current.Label, canvases)
 	})
 	return inventoryWriteError(err)
 }
@@ -200,6 +210,7 @@ func (s *Service) CreateNote(ctx context.Context, wsID uuid.UUID, req NoteCreate
 		return Note{}, apperr.Forbidden(apperr.CodeRoleInsufficient, "Only owners and admins can create workspace notes.")
 	}
 	var id uuid.UUID
+	var out Note
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -225,12 +236,16 @@ func (s *Service) CreateNote(ctx context.Context, wsID uuid.UUID, req NoteCreate
 		if err := insertPlaceOn(ctx, q, wsID, req.PlaceOn, "note", id); err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.NoteCreate, "note", events.NoteCreated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.NoteCreate, "note", events.NoteCreated, id, row.Title, nil); err != nil {
+			return err
+		}
+		out, err = readNote(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Note{}, inventoryWriteError(err)
 	}
-	return s.GetNote(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) UpdateNote(ctx context.Context, wsID, id uuid.UUID, req NoteUpdate, match *int32) (Note, error) {
@@ -241,6 +256,7 @@ func (s *Service) UpdateNote(ctx context.Context, wsID, id uuid.UUID, req NoteUp
 	if !req.hasChange() {
 		return Note{}, apperr.Invalid(apperr.CodeValidation, "At least one field is required.")
 	}
+	var out Note
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -284,12 +300,16 @@ func (s *Service) UpdateNote(ctx context.Context, wsID, id uuid.UUID, req NoteUp
 		if err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.NoteUpdate, "note", events.NoteUpdated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.NoteUpdate, "note", events.NoteUpdated, id, current.Title, nil); err != nil {
+			return err
+		}
+		out, err = readNote(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Note{}, inventoryWriteError(err)
 	}
-	return s.GetNote(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) DeleteNote(ctx context.Context, wsID, id uuid.UUID, match *int32) error {
@@ -332,7 +352,7 @@ func (s *Service) DeleteNote(ctx context.Context, wsID, id uuid.UUID, match *int
 		if count != 1 {
 			return apperr.PreconditionFailed()
 		}
-		return recordInventoryChange(ctx, q, actor, authz.NoteDelete, "note", events.NoteDeleted, id, canvases)
+		return recordInventoryChange(ctx, q, actor, authz.NoteDelete, "note", events.NoteDeleted, id, current.Title, canvases)
 	})
 	return inventoryWriteError(err)
 }

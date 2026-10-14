@@ -51,6 +51,10 @@ func (h *Handler) stream(ctx context.Context, in *streamInput) (*huma.StreamResp
 			return
 		}
 		controller := http.NewResponseController(rw)
+		_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if _, err := fmt.Fprint(writer, ": ok\n\n"); err != nil {
+			return
+		}
 		if controller.Flush() != nil {
 			return
 		}

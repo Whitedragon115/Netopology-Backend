@@ -51,6 +51,7 @@ func (s *Service) CreateNode(ctx context.Context, wsID uuid.UUID, req NodeCreate
 		return Node{}, err
 	}
 	var id uuid.UUID
+	var out Node
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -92,12 +93,16 @@ func (s *Service) CreateNode(ctx context.Context, wsID uuid.UUID, req NodeCreate
 		if err := insertPlaceOn(ctx, q, wsID, req.PlaceOn, "node", id); err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.NodeCreate, "node", events.NodeCreated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.NodeCreate, "node", events.NodeCreated, id, row.Name, nil); err != nil {
+			return err
+		}
+		out, err = readNode(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Node{}, inventoryWriteError(err)
 	}
-	return s.GetNode(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) UpdateNode(ctx context.Context, wsID, id uuid.UUID, req NodeUpdate, match *int32) (Node, error) {
@@ -108,6 +113,7 @@ func (s *Service) UpdateNode(ctx context.Context, wsID, id uuid.UUID, req NodeUp
 	if !req.hasChange() {
 		return Node{}, apperr.Invalid(apperr.CodeValidation, "At least one field is required.")
 	}
+	var out Node
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -175,12 +181,16 @@ func (s *Service) UpdateNode(ctx context.Context, wsID, id uuid.UUID, req NodeUp
 		if err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.NodeUpdate, "node", events.NodeUpdated, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.NodeUpdate, "node", events.NodeUpdated, id, current.Name, nil); err != nil {
+			return err
+		}
+		out, err = readNode(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Node{}, inventoryWriteError(err)
 	}
-	return s.GetNode(ctx, wsID, id)
+	return out, nil
 }
 
 func (s *Service) DeleteNode(ctx context.Context, wsID, id uuid.UUID, match *int32) error {
@@ -223,7 +233,7 @@ func (s *Service) DeleteNode(ctx context.Context, wsID, id uuid.UUID, match *int
 		if count != 1 {
 			return apperr.PreconditionFailed()
 		}
-		return recordInventoryChange(ctx, q, actor, authz.NodeDelete, "node", events.NodeDeleted, id, canvases)
+		return recordInventoryChange(ctx, q, actor, authz.NodeDelete, "node", events.NodeDeleted, id, current.Name, canvases)
 	})
 	return inventoryWriteError(err)
 }
@@ -233,6 +243,7 @@ func (s *Service) SetNodeHealth(ctx context.Context, wsID, id uuid.UUID, req Hea
 	if err != nil {
 		return Node{}, err
 	}
+	var out Node
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
 		vis, err := visible(ctx, q, actor)
 		if err != nil {
@@ -241,17 +252,21 @@ func (s *Service) SetNodeHealth(ctx context.Context, wsID, id uuid.UUID, req Hea
 		if err := requireVisible(vis, "node", id); err != nil {
 			return err
 		}
-		_, err = q.SetNodeHealthInventory(ctx, dbgen.SetNodeHealthInventoryParams{WorkspaceID: wsID, ID: id, Status: req.Status, Message: req.Message})
+		row, err := q.SetNodeHealthInventory(ctx, dbgen.SetNodeHealthInventoryParams{WorkspaceID: wsID, ID: id, Status: req.Status, Message: req.Message})
 		if pg.IsNotFound(err) {
 			return apperr.ErrNotFound()
 		}
 		if err != nil {
 			return err
 		}
-		return recordInventoryChange(ctx, q, actor, authz.NodeHealthSet, "node", events.HealthChanged, id, nil)
+		if err := recordInventoryChange(ctx, q, actor, authz.NodeHealthSet, "node", events.HealthChanged, id, row.Name, nil); err != nil {
+			return err
+		}
+		out, err = readNode(ctx, q, actor, id)
+		return err
 	})
 	if err != nil {
 		return Node{}, inventoryWriteError(err)
 	}
-	return s.GetNode(ctx, wsID, id)
+	return out, nil
 }

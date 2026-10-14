@@ -53,12 +53,15 @@ func TestStreamVisibilityRedactionAndResume(t *testing.T) {
 	if vr.StatusCode != http.StatusOK || vr.Header.Get("Content-Type") != "text/event-stream" {
 		t.Fatalf("response %v", vr)
 	}
+	vs := bufio.NewScanner(vr.Body)
+	if !vs.Scan() || vs.Text() != ": ok" || !vs.Scan() || vs.Text() != "" {
+		t.Fatalf("missing immediate opening comment: %q, %v", vs.Text(), vs.Err())
+	}
 	// The editor must skip this unplaced subject before receiving the visible one.
 	owner.Do(http.MethodPost, root+"/nodes", map[string]any{"name": "Invisible", "category": "network"}).Expect(t, 201)
 	var node struct{ ID uuid.UUID }
 	owner.Do(http.MethodPost, root+"/nodes", map[string]any{"name": "Visible", "category": "network", "placeOn": map[string]any{"canvasId": tab.ID, "x": 0, "y": 0}, "properties": []map[string]any{{"key": "secret", "label": "Secret", "value": "DO-NOT-SEND", "sensitive": true}}}).Expect(t, 201).JSON(t, &node)
 	// Canvas filtering excludes the workspace inventory event with no canvas relevance.
-	vs := bufio.NewScanner(vr.Body)
 	event := nextEvent(t, vs)
 	if data, ok := event.Data.(map[string]any); !ok || data["name"] != "Invisible" {
 		t.Fatalf("workspace-wide event %+v", event)

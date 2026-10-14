@@ -146,21 +146,25 @@ func (s *Service) GetArea(ctx context.Context, wsID, id uuid.UUID) (Area, error)
 	}
 	var out Area
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
-		vis, err := visible(ctx, q, actor)
-		if err != nil {
-			return err
-		}
-		row, err := q.GetAreaVisible(ctx, dbgen.GetAreaVisibleParams{WorkspaceID: wsID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.AreaIds, VisibleNodeIds: vis.ids.NodeIds})
-		if pg.IsNotFound(err) {
-			return apperr.ErrNotFound()
-		}
-		if err != nil {
-			return err
-		}
-		out, err = areaFromRow(areaBase(row.ID, row.WorkspaceID, row.ParentID, row.Name, row.Kind, row.Color, row.Cidr, row.VlanID, row.Description, row.Properties, row.CreatedBy, row.CreatedAt, row.UpdatedAt, row.Version), row.NodeCount, audience(actor))
+		out, err = readArea(ctx, q, actor, id)
 		return err
 	})
 	return out, err
+}
+
+func readArea(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, id uuid.UUID) (Area, error) {
+	vis, err := visible(ctx, q, actor)
+	if err != nil {
+		return Area{}, err
+	}
+	row, err := q.GetAreaVisible(ctx, dbgen.GetAreaVisibleParams{WorkspaceID: actor.WorkspaceID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.AreaIds, VisibleNodeIds: vis.ids.NodeIds})
+	if pg.IsNotFound(err) {
+		return Area{}, apperr.ErrNotFound()
+	}
+	if err != nil {
+		return Area{}, err
+	}
+	return areaFromRow(areaBase(row.ID, row.WorkspaceID, row.ParentID, row.Name, row.Kind, row.Color, row.Cidr, row.VlanID, row.Description, row.Properties, row.CreatedBy, row.CreatedAt, row.UpdatedAt, row.Version), row.NodeCount, audience(actor))
 }
 
 func (s *Service) ListNodes(ctx context.Context, wsID uuid.UUID, in NodeFilter) (NodePage, error) {
@@ -206,21 +210,25 @@ func (s *Service) GetNode(ctx context.Context, wsID, id uuid.UUID) (Node, error)
 	}
 	var out Node
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
-		vis, err := visible(ctx, q, actor)
-		if err != nil {
-			return err
-		}
-		row, err := q.GetNodeVisible(ctx, dbgen.GetNodeVisibleParams{WorkspaceID: wsID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.NodeIds})
-		if pg.IsNotFound(err) {
-			return apperr.ErrNotFound()
-		}
-		if err != nil {
-			return err
-		}
-		out, err = nodeFromRow(row, audience(actor))
+		out, err = readNode(ctx, q, actor, id)
 		return err
 	})
 	return out, err
+}
+
+func readNode(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, id uuid.UUID) (Node, error) {
+	vis, err := visible(ctx, q, actor)
+	if err != nil {
+		return Node{}, err
+	}
+	row, err := q.GetNodeVisible(ctx, dbgen.GetNodeVisibleParams{WorkspaceID: actor.WorkspaceID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.NodeIds})
+	if pg.IsNotFound(err) {
+		return Node{}, apperr.ErrNotFound()
+	}
+	if err != nil {
+		return Node{}, err
+	}
+	return nodeFromRow(row, audience(actor))
 }
 
 func (s *Service) GetNodeUsage(ctx context.Context, wsID, id uuid.UUID) (NodeUsage, error) {
@@ -306,21 +314,25 @@ func (s *Service) GetLink(ctx context.Context, wsID, id uuid.UUID) (Link, error)
 	}
 	var out Link
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
-		vis, err := visible(ctx, q, actor)
-		if err != nil {
-			return err
-		}
-		row, err := q.GetLinkVisible(ctx, dbgen.GetLinkVisibleParams{WorkspaceID: wsID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.LinkIds})
-		if pg.IsNotFound(err) {
-			return apperr.ErrNotFound()
-		}
-		if err != nil {
-			return err
-		}
-		out, err = linkFromRow(row, audience(actor))
+		out, err = readLink(ctx, q, actor, id)
 		return err
 	})
 	return out, err
+}
+
+func readLink(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, id uuid.UUID) (Link, error) {
+	vis, err := visible(ctx, q, actor)
+	if err != nil {
+		return Link{}, err
+	}
+	row, err := q.GetLinkVisible(ctx, dbgen.GetLinkVisibleParams{WorkspaceID: actor.WorkspaceID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.LinkIds})
+	if pg.IsNotFound(err) {
+		return Link{}, apperr.ErrNotFound()
+	}
+	if err != nil {
+		return Link{}, err
+	}
+	return linkFromRow(row, audience(actor))
 }
 
 func (s *Service) ListNotes(ctx context.Context, wsID uuid.UUID, in NoteFilter) (NotePage, error) {
@@ -369,25 +381,29 @@ func (s *Service) GetNote(ctx context.Context, wsID, id uuid.UUID) (Note, error)
 	}
 	var out Note
 	err = s.db.InWorkspace(ctx, wsID, func(q *dbgen.Queries) error {
-		vis, err := visible(ctx, q, actor)
-		if err != nil {
-			return err
-		}
-		row, err := q.GetNoteVisible(ctx, dbgen.GetNoteVisibleParams{WorkspaceID: wsID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.NoteIds})
-		if pg.IsNotFound(err) {
-			return apperr.ErrNotFound()
-		}
-		if err != nil {
-			return err
-		}
-		var ok bool
-		out, ok = noteFromRow(row, audience(actor))
-		if !ok {
-			return apperr.ErrNotFound()
-		}
-		return nil
+		out, err = readNote(ctx, q, actor, id)
+		return err
 	})
 	return out, err
+}
+
+func readNote(ctx context.Context, q *dbgen.Queries, actor *authz.Actor, id uuid.UUID) (Note, error) {
+	vis, err := visible(ctx, q, actor)
+	if err != nil {
+		return Note{}, err
+	}
+	row, err := q.GetNoteVisible(ctx, dbgen.GetNoteVisibleParams{WorkspaceID: actor.WorkspaceID, ID: id, AllVisible: vis.all, VisibleIds: vis.ids.NoteIds})
+	if pg.IsNotFound(err) {
+		return Note{}, apperr.ErrNotFound()
+	}
+	if err != nil {
+		return Note{}, err
+	}
+	out, ok := noteFromRow(row, audience(actor))
+	if !ok {
+		return Note{}, apperr.ErrNotFound()
+	}
+	return out, nil
 }
 
 func noteFilterTarget(in NoteFilter) (string, *uuid.UUID, error) {

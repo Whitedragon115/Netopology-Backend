@@ -118,23 +118,26 @@ func (s *Service) ApplyOperations(ctx context.Context, wsID, canvasID uuid.UUID,
 		}
 		if err := auditlog.Write(ctx, q, auditlog.Entry{
 			WorkspaceID: &wsID, Action: authz.CanvasEdit,
-			TargetType: "canvas", TargetID: &canvasID, Metadata: map[string]any{"operationCounts": counts},
+			TargetType: "canvas", TargetID: &canvasID, Metadata: map[string]any{"name": canvasRow.Name, "operationCounts": counts},
 		}); err != nil {
 			return err
 		}
-		return events.Emit(ctx, q, events.Change{
+		if err := events.Emit(ctx, q, events.Change{
 			WorkspaceID: wsID, Type: events.CanvasOperationsApplied,
 			SubjectID: &canvasID, CanvasIDs: []uuid.UUID{canvasID},
-		})
+		}); err != nil {
+			return err
+		}
+		view, err := s.view(ctx, q, actor, canvasRow)
+		if err != nil {
+			return err
+		}
+		out.View = &view
+		return nil
 	})
 	if err != nil {
 		return CanvasOperationResult{}, err
 	}
-	view, err := s.GetView(ctx, wsID, canvasID)
-	if err != nil {
-		return CanvasOperationResult{}, err
-	}
-	out.View = &view
 	return out, nil
 }
 
