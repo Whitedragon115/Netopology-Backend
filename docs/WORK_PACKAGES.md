@@ -8,7 +8,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | WP | Title | Depends on | State |
 |---|---|---|---|
 | 01 | Platform, environment, reference feature (setup) | — | ✅ done (architect) |
-| 02 | Full stack in Docker (parent repo compose) | 01 | 🟡 isolated remote full stack verified; local Docker Desktop startup blocked (see DOCKER_VALIDATION.md) |
+| 02 | Full stack in Docker (parent repo compose) | 01 | ✅ done; verified on the configured remote Docker as explicitly requested (see DOCKER_VALIDATION.md) |
 | 03 | Password sign-in, logout, providers, `getMe` | 01 | ✅ done |
 | 04 | Accounts: `/me`, `/users`, instance settings | 03 | ✅ done |
 | 05 | Google + Discord sign-in and linking | 04 | ✅ done |
@@ -20,7 +20,7 @@ Every package ends with `go tool task check` green and the frontend contract unc
 | 11 | Live events (SSE) | 08 (10 for canvas events) | ✅ done |
 | 12 | Share links and guests | 10 | ✅ done |
 | 13 | Audit log listing | 06 | ✅ done |
-| 14 | Permission matrix sweep, strict contract | 03–13 | ✅ done; generated-schema follow-up DRA-72 |
+| 14 | Permission matrix sweep, strict contract | 03–13 | ✅ done; recursive generated-schema equivalence completed (DRA-72) |
 | 15 | Frontend on the real API (parent repo) | 10 (12 for sharing) | ⏳ |
 
 Parallel lanes after WP-03: **A** 04 → 05 · **B** 06 → 07 → 08 → 09 → 10 → 12 · **C** 13 (after 06) · **D** 11 (after 08).
@@ -34,11 +34,13 @@ Delivered: everything in [ARCHITECTURE.md §2](ARCHITECTURE.md#2-repository-layo
 bodies; `getSetupStatus` + `completeSetup` implemented and tested; contract, permission-key and
 event-type tests; test harness; Taskfile; lint; CI; Dockerfile; migration `00003_events.sql`.
 
-## WP-02 Full stack in Docker 🟡 (verify)
+## WP-02 Full stack in Docker ✅
 
 Parent repo: `compose.yaml`, `Dockerfile` (web), `deploy/nginx/default.conf`, `.env.example`.
-**Verify:** on a machine with a local Docker engine, `cp .env.example .env`, fill the secrets,
-`docker compose up --build` → http://localhost shows the app; `/api/v1/setup` returns JSON.
+**Verify:** `cp .env.example .env`, fill the secrets, then `docker compose up --build`
+shows the app and `/api/v1/setup` returns JSON. The user explicitly selected the
+configured remote Docker context instead of a local engine; use
+`docker --context remote-server compose up --build` for that environment.
 Fix anything that does not start; do not change the network layout (IDEA.md §14.2).
 
 ---

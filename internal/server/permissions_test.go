@@ -58,7 +58,7 @@ func TestWorkspacePermissionMatrix(t *testing.T) {
 		{"canvas create", http.MethodPost, root + "/canvases", map[string]any{"name": "No"}},
 		{"canvas update", http.MethodPatch, canvasPath, map[string]any{"name": "No"}},
 		{"canvas delete", http.MethodDelete, canvasPath, nil},
-		{"canvas edit", http.MethodPost, canvasPath + "/operations", map[string]any{"operations": []map[string]any{{"op": "shape.create", "kind": "rect", "x": 0, "y": 0}}}},
+		{"canvas edit", http.MethodPost, canvasPath + "/operations", map[string]any{"operations": []map[string]any{{"op": "shape.create", "kind": "rectangle", "x": 0, "y": 0}}}},
 		{"canvas lock", http.MethodPost, canvasPath + "/lock", nil},
 		{"canvas unlock", http.MethodDelete, canvasPath + "/lock", nil},
 		{"share create", http.MethodPost, canvasPath + "/share-links", map[string]any{}},
@@ -92,7 +92,7 @@ func TestWorkspacePermissionMatrix(t *testing.T) {
 	owner.Do(http.MethodPut, root+"/members/"+ed.ID.String()+"/canvas-grants", map[string]any{"canvasIds": []uuid.UUID{canvas.ID}}).Expect(t, 200)
 	owner.Do(http.MethodPost, canvasPath+"/lock", nil).Expect(t, 200)
 	for _, client := range []*testutil.Client{owner, admin, editor} {
-		client.Do(http.MethodPost, canvasPath+"/operations", map[string]any{"operations": []map[string]any{{"op": "shape.create", "kind": "rect", "x": 0, "y": 0}}}).Expect(t, 423)
+		client.Do(http.MethodPost, canvasPath+"/operations", map[string]any{"operations": []map[string]any{{"op": "shape.create", "kind": "rectangle", "x": 0, "y": 0}}}).Expect(t, 423)
 	}
 	editor.Do(http.MethodDelete, canvasPath+"/lock", nil).Expect(t, 200)
 }

@@ -39,7 +39,7 @@ func NewService(db *pg.DB, az *authz.Resolver, broker *platformevents.Broker, in
 
 type Event struct {
 	ID          uuid.UUID  `json:"id"`
-	Type        string     `json:"type"`
+	Type        string     `json:"type" enum:"node.created,node.updated,node.deleted,link.created,link.updated,link.deleted,area.created,area.updated,area.deleted,note.created,note.updated,note.deleted,canvas.created,canvas.updated,canvas.deleted,canvas.operations_applied,health.changed,member.changed"`
 	WorkspaceID uuid.UUID  `json:"workspaceId"`
 	CanvasID    *uuid.UUID `json:"canvasId,omitempty"`
 	ActorID     *uuid.UUID `json:"actorId,omitempty"`

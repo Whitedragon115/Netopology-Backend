@@ -1,5 +1,19 @@
 # Implementation decisions — 2026-10-14
 
+- User clarified Docker must run on the configured remote server only. Stop the local Desktop instance started for WP-02, perform final stack validation remotely, and treat this explicit instruction as overriding WP-02's original local-engine requirement. Keep all existing remote application/database containers intact; use an isolated verification project.
+- WP-02: bake nginx configuration and PostgreSQL initialization into their images so the checked-in Compose layout works with a remote Docker context, without host bind mounts. Preserve edge/core isolation, the existing gateway/API/web routes and the remote database. Validate with separate image tags, project name and database volume.
+- DRA-72: preserve public frontend schema names (including scalar enums and Me/Viewport aliases) by deriving them from generated Go wire schemas, and retain them through x-client-schemas references. Correct the permission-test shape fixture from invalid "rect" to the contract's "rectangle" so it reaches authorization.
+- WP-02: fresh remote startup exposed a readiness race: the Unix socket accepted connections during PostgreSQL initialization, then restarted before the API could migrate. Probe TCP at 127.0.0.1 instead, which only opens after initialization completes.
+- DRA-72: recursive comparison now covers every canonical component and operation's request/response/parameter schemas; switch pnpm gen:api to the generated document after this gate passes and verify frontend type compatibility.
+- DRA-72 client compatibility: preserve omitted additionalProperties for typed objects and shared Version references. These are equivalent wire schemas but avoid introducing TypeScript index signatures or different readonly propagation. Generated frontend types now pass typecheck without changing frontend feature logic.
+- WP-02: exclude .task from backend image contexts so local task caches and temporary verification credentials are not uploaded into build layers.
+- Final validation: strict backend check passed with zero lint issues and PostgreSQL 18 integration tests; recursive schema and negative validation tests passed. The frontend generated client typecheck passed. Remote production image builds and gateway checks passed; validate the corrected TCP readiness from a second fresh database and remove only the isolated project's resources afterward.
+
+- DRA-72: supplement Go reflection with explicit wire metadata, without reading/copying the canonical contract at runtime. Compare nested request, response, parameter and SSE payload constraints independently; normalize only equivalent reference/nullable representations, numeric storage formats and non-structural prose.
+- DRA-72: retain the SSE Event component through an explicit x-sse-event-schema reference because Huma prunes components not referenced by an operation. The text/event-stream media type remains a string.
+- WP-02 retry: Docker Desktop is stopped and its runtime socket is stale. Quarantine only the verified LocalAppData/Docker/run directory after confirming no Desktop backend processes remain. Preserve its contents and all Docker images, volumes, settings and remote containers.
+- WP-02 retry: inference startup recovered, exposing a second stale socket in docker-secrets-engine. Verified that this directory contains only engine.sock; quarantine that runtime directory too, preserving it intact. No stored credentials or database data are removed.
+
 - User authorized completion of remaining jobs without questions; record decisions here.
 - Work on `alpha`, overriding the per-WP branch instruction in AGENTS.md as explicitly requested by the user.
 - The other agent owns frontend implementation. Preserve parent-repository edits and existing frontend processes; implement backend packages and coordinate through this log and the existing task board.

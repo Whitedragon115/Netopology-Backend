@@ -2,6 +2,7 @@
 .env
 bin
 tmp
+.task
 tools
 docs
 sandbox

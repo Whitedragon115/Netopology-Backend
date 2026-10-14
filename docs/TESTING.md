@@ -47,5 +47,11 @@ func TestSomething(t *testing.T) {
 
 ## Contract strictness
 
+`TestRecursiveContract` independently checks all nested request, response,
+parameter and public component schemas, including SSE Event and discriminated
+canvas operation variants. See CONTRACT_DIFFERENCES.md for equivalent schema
+representations normalized by the comparator. `TestWireSchemaValidation` checks
+that the generated constraints also validate representative request values.
+
 While features are being built, unimplemented operations are only *logged* by the contract test.
 `task test:strict` fails on them; it becomes the CI default after WP-14.

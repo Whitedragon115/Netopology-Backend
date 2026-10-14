@@ -1,7 +1,6 @@
 components:
   schemas:
     Account:
-      additionalProperties: false
       properties:
         createdAt:
           format: date-time
@@ -46,6 +45,7 @@ components:
           format: date-time
           type: string
         username:
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{1,38}[A-Za-z0-9]$
           type: string
       required:
         - id
@@ -59,7 +59,11 @@ components:
         - updatedAt
       type: object
     AccountCreate:
-      additionalProperties: false
+      anyOf:
+        - required:
+            - password
+        - required:
+            - email
       properties:
         displayName:
           maxLength: 100
@@ -85,7 +89,6 @@ components:
         - username
       type: object
     AccountPage:
-      additionalProperties: false
       properties:
         items:
           items:
@@ -99,7 +102,7 @@ components:
         - items
       type: object
     AccountUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         displayName:
           maxLength: 100
@@ -122,14 +125,16 @@ components:
           type: string
       type: object
     Actor:
-      additionalProperties: false
       properties:
         displayName:
           type:
             - string
             - "null"
         id:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         type:
           enum:
             - user
@@ -139,15 +144,15 @@ components:
           type: string
       required:
         - type
-        - id
-        - displayName
       type: object
     Area:
-      additionalProperties: false
       properties:
         cidr:
-          type: string
+          type:
+            - string
+            - "null"
         color:
+          default: yellow
           enum:
             - yellow
             - teal
@@ -163,6 +168,12 @@ components:
         description:
           type: string
         health:
+          enum:
+            - healthy
+            - degraded
+            - down
+            - unknown
+          readOnly: true
           type: string
         id:
           format: uuid
@@ -180,9 +191,13 @@ components:
           type: string
         nodeCount:
           format: int64
+          readOnly: true
           type: integer
         parentId:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         properties:
           items:
             $ref: "#/components/schemas/Field"
@@ -191,11 +206,14 @@ components:
           format: date-time
           type: string
         version:
-          format: int32
-          type: integer
+          $ref: "#/components/schemas/Version"
         vlanId:
           format: int32
-          type: integer
+          maximum: 4094
+          minimum: 1
+          type:
+            - integer
+            - "null"
       required:
         - id
         - parentId
@@ -207,12 +225,23 @@ components:
         - updatedAt
         - version
       type: object
+    AreaColor:
+      default: yellow
+      enum:
+        - yellow
+        - teal
+        - violet
+        - rose
+        - blue
+        - green
+        - gray
+      type: string
     AreaCreate:
-      additionalProperties: false
       properties:
         cidr:
           type: string
         color:
+          default: yellow
           enum:
             - yellow
             - teal
@@ -237,6 +266,7 @@ components:
           minLength: 1
           type: string
         parentId:
+          format: uuid
           type: string
         placeOn:
           $ref: "#/components/schemas/PlaceOn"
@@ -252,24 +282,36 @@ components:
       required:
         - name
       type: object
+    AreaKind:
+      enum:
+        - site
+        - network
+        - vlan
+        - cloud
+        - custom
+      type: string
     AreaPage:
-      additionalProperties: false
       properties:
         items:
           items:
             $ref: "#/components/schemas/Area"
           type: array
         nextCursor:
-          type: string
+          type:
+            - string
+            - "null"
       required:
         - items
       type: object
     AreaUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         cidr:
-          type: string
+          type:
+            - string
+            - "null"
         color:
+          default: yellow
           enum:
             - yellow
             - teal
@@ -294,7 +336,10 @@ components:
           minLength: 1
           type: string
         parentId:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         properties:
           items:
             $ref: "#/components/schemas/Field"
@@ -303,10 +348,11 @@ components:
           format: int32
           maximum: 4094
           minimum: 1
-          type: integer
+          type:
+            - integer
+            - "null"
       type: object
     AuditEntry:
-      additionalProperties: false
       properties:
         action:
           type: string
@@ -316,6 +362,7 @@ components:
           format: date-time
           type: string
         id:
+          format: uuid
           type: string
         ip:
           type:
@@ -325,18 +372,17 @@ components:
           additionalProperties: {}
           type: object
         target:
-          $ref: "#/components/schemas/Target"
+          oneOf:
+            - $ref: "#/components/schemas/Target"
+            - type: "null"
       required:
         - id
         - actor
         - action
-        - target
         - metadata
-        - ip
         - createdAt
       type: object
     AuditPage:
-      additionalProperties: false
       properties:
         items:
           items:
@@ -349,8 +395,12 @@ components:
       required:
         - items
       type: object
+    AuthProvider:
+      enum:
+        - google
+        - discord
+      type: string
     AuthProviders:
-      additionalProperties: false
       properties:
         password:
           type: boolean
@@ -363,30 +413,35 @@ components:
         - providers
       type: object
     BreadcrumbItem:
-      additionalProperties: false
       properties:
         areaId:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         canvasId:
+          format: uuid
           type: string
         name:
           type: string
       required:
-        - areaId
         - name
         - canvasId
       type: object
     Canvas:
-      additionalProperties: false
       properties:
         areaId:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         createdAt:
           format: date-time
           type: string
         description:
           type: string
         id:
+          format: uuid
           type: string
         isProtected:
           type: boolean
@@ -396,12 +451,37 @@ components:
             - area
           type: string
         lock:
-          $ref: "#/components/schemas/CanvasLock"
+          oneOf:
+            - $ref: "#/components/schemas/CanvasLock"
+            - type: "null"
         name:
           maxLength: 100
           type: string
         settings:
-          additionalProperties: {}
+          additionalProperties: true
+          properties:
+            grid:
+              default: true
+              type: boolean
+            hiddenLinkKinds:
+              items:
+                enum:
+                  - physical
+                  - logical
+                  - vpn_tunnel
+                  - proxy_route
+                  - dns_dependency
+                  - storage_mount
+                type: string
+              type: array
+              uniqueItems: true
+            showHealth:
+              default: true
+              type: boolean
+            snap:
+              default: 16
+              minimum: 0
+              type: integer
           type: object
         sortOrder:
           format: int32
@@ -410,8 +490,7 @@ components:
           format: date-time
           type: string
         version:
-          format: int32
-          type: integer
+          $ref: "#/components/schemas/Version"
         viewport:
           $ref: "#/components/schemas/CanvasViewport"
       required:
@@ -430,18 +509,41 @@ components:
         - version
       type: object
     CanvasCreate:
-      additionalProperties: false
       properties:
         description:
           type: string
         isProtected:
+          default: false
           type: boolean
         name:
           maxLength: 100
           minLength: 1
           type: string
         settings:
-          additionalProperties: {}
+          additionalProperties: true
+          properties:
+            grid:
+              default: true
+              type: boolean
+            hiddenLinkKinds:
+              items:
+                enum:
+                  - physical
+                  - logical
+                  - vpn_tunnel
+                  - proxy_route
+                  - dns_dependency
+                  - storage_mount
+                type: string
+              type: array
+              uniqueItems: true
+            showHealth:
+              default: true
+              type: boolean
+            snap:
+              default: 16
+              minimum: 0
+              type: integer
           type: object
         sortOrder:
           format: int32
@@ -450,92 +552,50 @@ components:
         - name
       type: object
     CanvasGrants:
-      additionalProperties: false
       properties:
         canvasIds:
           items:
+            format: uuid
             type: string
           type: array
+          uniqueItems: true
       required:
         - canvasIds
       type: object
     CanvasLock:
-      additionalProperties: false
       properties:
         lockedAt:
           format: date-time
           type: string
         userId:
+          format: uuid
           type: string
       required:
         - userId
         - lockedAt
       type: object
     CanvasOperation:
-      additionalProperties: false
-      properties:
-        clientId:
-          type: string
-        collapsed:
-          type: boolean
-        data:
-          additionalProperties: {}
-          type: object
-        height:
-          format: double
-          type: number
-        hidden:
-          type: boolean
-        item:
-          $ref: "#/components/schemas/ItemRef"
-        kind:
-          type: string
-        linkId:
-          type: string
-        op:
-          enum:
-            - place
-            - update
-            - remove
-            - shape.create
-            - shape.update
-            - shape.delete
-            - link.override
-            - link.reset
-          type: string
-        parentPlacementId:
-          type: string
-        placementId:
-          type: string
-        rotation:
-          format: double
-          type: number
-        shapeId:
-          type: string
-        style:
-          additionalProperties: {}
-          type: object
-        waypoints:
-          items:
-            $ref: "#/components/schemas/Point"
-          type: array
-        width:
-          format: double
-          type: number
-        x:
-          format: double
-          type: number
-        "y":
-          format: double
-          type: number
-        zIndex:
-          format: int32
-          type: integer
-      required:
-        - op
-      type: object
+      discriminator:
+        mapping:
+          link.override: "#/components/schemas/OpLinkOverride"
+          link.reset: "#/components/schemas/OpLinkReset"
+          place: "#/components/schemas/OpPlace"
+          remove: "#/components/schemas/OpRemovePlacement"
+          shape.create: "#/components/schemas/OpCreateShape"
+          shape.delete: "#/components/schemas/OpDeleteShape"
+          shape.update: "#/components/schemas/OpUpdateShape"
+          update: "#/components/schemas/OpUpdatePlacement"
+        propertyName: op
+      oneOf:
+        - $ref: "#/components/schemas/OpPlace"
+        - $ref: "#/components/schemas/OpUpdatePlacement"
+        - $ref: "#/components/schemas/OpRemovePlacement"
+        - $ref: "#/components/schemas/OpCreateShape"
+        - $ref: "#/components/schemas/OpUpdateShape"
+        - $ref: "#/components/schemas/OpDeleteShape"
+        - $ref: "#/components/schemas/OpLinkOverride"
+        - $ref: "#/components/schemas/OpLinkReset"
     CanvasOperationBatch:
-      additionalProperties: false
       properties:
         operations:
           items:
@@ -547,7 +607,6 @@ components:
         - operations
       type: object
     CanvasOperationResult:
-      additionalProperties: false
       properties:
         results:
           items:
@@ -559,24 +618,24 @@ components:
         - results
       type: object
     CanvasOperationResultItem:
-      additionalProperties: false
       properties:
         clientId:
           type: string
         id:
+          format: uuid
           type: string
         index:
           format: int64
           type: integer
         removedPlacementIds:
           items:
+            format: uuid
             type: string
           type: array
       required:
         - index
       type: object
     CanvasPage:
-      additionalProperties: false
       properties:
         items:
           items:
@@ -585,8 +644,34 @@ components:
       required:
         - items
       type: object
+    CanvasSettings:
+      additionalProperties: true
+      properties:
+        grid:
+          default: true
+          type: boolean
+        hiddenLinkKinds:
+          items:
+            enum:
+              - physical
+              - logical
+              - vpn_tunnel
+              - proxy_route
+              - dns_dependency
+              - storage_mount
+            type: string
+          type: array
+          uniqueItems: true
+        showHealth:
+          default: true
+          type: boolean
+        snap:
+          default: 16
+          minimum: 0
+          type: integer
+      type: object
     CanvasUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         description:
           type: string
@@ -597,7 +682,30 @@ components:
           minLength: 1
           type: string
         settings:
-          additionalProperties: {}
+          additionalProperties: true
+          properties:
+            grid:
+              default: true
+              type: boolean
+            hiddenLinkKinds:
+              items:
+                enum:
+                  - physical
+                  - logical
+                  - vpn_tunnel
+                  - proxy_route
+                  - dns_dependency
+                  - storage_mount
+                type: string
+              type: array
+              uniqueItems: true
+            showHealth:
+              default: true
+              type: boolean
+            snap:
+              default: 16
+              minimum: 0
+              type: integer
           type: object
         sortOrder:
           format: int32
@@ -606,7 +714,6 @@ components:
           $ref: "#/components/schemas/CanvasViewport"
       type: object
     CanvasView:
-      additionalProperties: false
       properties:
         areas:
           items:
@@ -657,7 +764,6 @@ components:
         - shapes
       type: object
     CanvasViewport:
-      additionalProperties: false
       properties:
         x:
           format: double
@@ -666,15 +772,68 @@ components:
           format: double
           type: number
         zoom:
+          exclusiveMinimum: 0
           format: double
+          maximum: 8
           type: number
       required:
         - x
         - "y"
         - zoom
       type: object
+    Event:
+      properties:
+        actorId:
+          format: uuid
+          type:
+            - string
+            - "null"
+        canvasId:
+          format: uuid
+          type:
+            - string
+            - "null"
+        data:
+          additionalProperties: true
+          type: object
+        id:
+          format: uuid
+          type: string
+        occurredAt:
+          format: date-time
+          type: string
+        type:
+          enum:
+            - node.created
+            - node.updated
+            - node.deleted
+            - link.created
+            - link.updated
+            - link.deleted
+            - area.created
+            - area.updated
+            - area.deleted
+            - note.created
+            - note.updated
+            - note.deleted
+            - canvas.created
+            - canvas.updated
+            - canvas.deleted
+            - canvas.operations_applied
+            - health.changed
+            - member.changed
+          type: string
+        workspaceId:
+          format: uuid
+          type: string
+      required:
+        - id
+        - type
+        - workspaceId
+        - occurredAt
+        - data
+      type: object
     Field:
-      additionalProperties: false
       properties:
         key:
           pattern: ^[a-z][a-z0-9_]{0,39}$
@@ -683,24 +842,31 @@ components:
           maxLength: 60
           type: string
         redacted:
+          readOnly: true
           type: boolean
         sensitive:
+          default: false
           type: boolean
         value:
           maxLength: 2000
-          type: string
+          type:
+            - string
+            - "null"
       required:
         - key
         - label
       type: object
     Health:
-      additionalProperties: false
       properties:
         checkedAt:
           format: date-time
-          type: string
+          type:
+            - string
+            - "null"
         message:
-          type: string
+          type:
+            - string
+            - "null"
         source:
           enum:
             - manual
@@ -718,7 +884,6 @@ components:
         - source
       type: object
     HealthSet:
-      additionalProperties: false
       properties:
         message:
           maxLength: 500
@@ -733,8 +898,17 @@ components:
       required:
         - status
       type: object
+    HealthStatus:
+      enum:
+        - healthy
+        - degraded
+        - down
+        - unknown
+      type: string
+    Id:
+      format: uuid
+      type: string
     Identity:
-      additionalProperties: false
       properties:
         createdAt:
           format: date-time
@@ -765,27 +939,28 @@ components:
         - provider
         - createdAt
       type: object
+    InstanceRole:
+      enum:
+        - owner
+        - admin
+        - member
+      type: string
     InstanceSettings:
-      additionalProperties: false
       properties:
         oauthAutoLinkByEmail:
           default: true
-          type:
-            - boolean
-            - "null"
+          type: boolean
         sessionTtlHours:
           default: 168
           format: int64
           maximum: 8760
           minimum: 1
-          type:
-            - integer
-            - "null"
+          type: integer
       type: object
     ItemRef:
-      additionalProperties: false
       properties:
         id:
+          format: uuid
           type: string
         type:
           enum:
@@ -798,7 +973,6 @@ components:
         - id
       type: object
     Link:
-      additionalProperties: false
       properties:
         createdAt:
           format: date-time
@@ -829,18 +1003,21 @@ components:
           format: uuid
           type: string
         sourcePort:
-          type: string
+          type:
+            - string
+            - "null"
         targetNodeId:
           format: uuid
           type: string
         targetPort:
-          type: string
+          type:
+            - string
+            - "null"
         updatedAt:
           format: date-time
           type: string
         version:
-          format: int32
-          type: integer
+          $ref: "#/components/schemas/Version"
       required:
         - id
         - sourceNodeId
@@ -855,9 +1032,9 @@ components:
         - version
       type: object
     LinkCreate:
-      additionalProperties: false
       properties:
         directed:
+          default: false
           type: boolean
         kind:
           enum:
@@ -889,12 +1066,21 @@ components:
         - targetNodeId
         - kind
       type: object
+    LinkKind:
+      enum:
+        - physical
+        - vpn_tunnel
+        - proxy_route
+        - dns_dependency
+        - storage_mount
+        - logical
+      type: string
     LinkOverride:
-      additionalProperties: false
       properties:
         hidden:
           type: boolean
         linkId:
+          format: uuid
           type: string
         style:
           additionalProperties: {}
@@ -902,26 +1088,29 @@ components:
         waypoints:
           items:
             $ref: "#/components/schemas/Point"
-          type: array
+          type:
+            - array
+            - "null"
       required:
         - linkId
         - hidden
         - style
       type: object
     LinkPage:
-      additionalProperties: false
       properties:
         items:
           items:
             $ref: "#/components/schemas/Link"
           type: array
         nextCursor:
-          type: string
+          type:
+            - string
+            - "null"
       required:
         - items
       type: object
     LinkUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         directed:
           type: boolean
@@ -941,12 +1130,15 @@ components:
             $ref: "#/components/schemas/Field"
           type: array
         sourcePort:
-          type: string
+          type:
+            - string
+            - "null"
         targetPort:
-          type: string
+          type:
+            - string
+            - "null"
       type: object
     ListMyIdentitiesOutputBody:
-      additionalProperties: false
       properties:
         hasPassword:
           type: boolean
@@ -959,7 +1151,6 @@ components:
         - hasPassword
       type: object
     LoginRequest:
-      additionalProperties: false
       properties:
         password:
           type: string
@@ -973,8 +1164,10 @@ components:
         - username
         - password
       type: object
+    Me:
+      $ref: "#/components/schemas/Account"
     MeUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         displayName:
           maxLength: 100
@@ -986,12 +1179,12 @@ components:
             - "null"
       type: object
     Member:
-      additionalProperties: false
       properties:
         canViewSensitive:
           type: boolean
         canvasIds:
           items:
+            format: uuid
             type: string
           type: array
         createdAt:
@@ -1011,13 +1204,13 @@ components:
         - role
       type: object
     MemberAdd:
-      additionalProperties: false
       properties:
         canViewSensitive:
           default: false
           type: boolean
         canvasIds:
           items:
+            format: uuid
             type: string
           type: array
         role:
@@ -1035,7 +1228,6 @@ components:
         - role
       type: object
     MemberPage:
-      additionalProperties: false
       properties:
         items:
           items:
@@ -1045,7 +1237,7 @@ components:
         - items
       type: object
     MemberUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         canViewSensitive:
           type: boolean
@@ -1058,7 +1250,6 @@ components:
           type: string
       type: object
     Membership:
-      additionalProperties: false
       properties:
         canViewSensitive:
           type: boolean
@@ -1074,10 +1265,12 @@ components:
         - canViewSensitive
       type: object
     Node:
-      additionalProperties: false
       properties:
         areaId:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         category:
           enum:
             - network
@@ -1091,13 +1284,18 @@ components:
           format: date-time
           type: string
         createdBy:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         description:
           type: string
         health:
           $ref: "#/components/schemas/Health"
         icon:
-          type: string
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -1119,8 +1317,7 @@ components:
           format: date-time
           type: string
         version:
-          format: int32
-          type: integer
+          $ref: "#/components/schemas/Version"
       required:
         - id
         - slug
@@ -1136,10 +1333,19 @@ components:
         - updatedAt
         - version
       type: object
+    NodeCategory:
+      enum:
+        - network
+        - compute
+        - service
+        - storage
+        - external
+        - generic
+      type: string
     NodeCreate:
-      additionalProperties: false
       properties:
         areaId:
+          format: uuid
           type: string
         category:
           enum:
@@ -1155,6 +1361,7 @@ components:
         icon:
           type: string
         isProtected:
+          default: false
           type: boolean
         name:
           maxLength: 100
@@ -1167,30 +1374,36 @@ components:
             $ref: "#/components/schemas/Field"
           type: array
         slug:
+          pattern: ^[a-z0-9][a-z0-9-]{0,62}$
           type: string
         type:
+          default: builtin.generic
           type: string
       required:
         - name
         - category
       type: object
     NodePage:
-      additionalProperties: false
       properties:
         items:
           items:
             $ref: "#/components/schemas/Node"
           type: array
         nextCursor:
-          type: string
+          type:
+            - string
+            - "null"
       required:
         - items
       type: object
     NodeUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         areaId:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         category:
           enum:
             - network
@@ -1203,7 +1416,9 @@ components:
         description:
           type: string
         icon:
-          type: string
+          type:
+            - string
+            - "null"
         isProtected:
           type: boolean
         name:
@@ -1215,12 +1430,12 @@ components:
             $ref: "#/components/schemas/Field"
           type: array
         slug:
+          pattern: ^[a-z0-9][a-z0-9-]{0,62}$
           type: string
         type:
           type: string
       type: object
     NodeUsage:
-      additionalProperties: false
       properties:
         canvases:
           items:
@@ -1242,7 +1457,6 @@ components:
         - noteCount
       type: object
     NodeUsageCanvas:
-      additionalProperties: false
       properties:
         id:
           format: uuid
@@ -1254,7 +1468,6 @@ components:
         - name
       type: object
     Note:
-      additionalProperties: false
       properties:
         body:
           type: string
@@ -1270,7 +1483,10 @@ components:
           format: date-time
           type: string
         createdBy:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         id:
           format: uuid
           type: string
@@ -1282,6 +1498,7 @@ components:
             - rule
           type: string
         redacted:
+          readOnly: true
           type: boolean
         target:
           $ref: "#/components/schemas/NoteTarget"
@@ -1292,10 +1509,12 @@ components:
           format: date-time
           type: string
         updatedBy:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         version:
-          format: int32
-          type: integer
+          $ref: "#/components/schemas/Version"
       required:
         - id
         - target
@@ -1308,8 +1527,15 @@ components:
         - updatedAt
         - version
       type: object
+    NoteColor:
+      enum:
+        - default
+        - yellow
+        - teal
+        - violet
+        - rose
+      type: string
     NoteCreate:
-      additionalProperties: false
       properties:
         body:
           type: string
@@ -1322,6 +1548,7 @@ components:
             - rose
           type: string
         isSensitive:
+          default: false
           type: boolean
         kind:
           enum:
@@ -1339,22 +1566,28 @@ components:
         - target
         - body
       type: object
+    NoteKind:
+      enum:
+        - note
+        - rule
+      type: string
     NotePage:
-      additionalProperties: false
       properties:
         items:
           items:
             $ref: "#/components/schemas/Note"
           type: array
         nextCursor:
-          type: string
+          type:
+            - string
+            - "null"
       required:
         - items
       type: object
     NoteTarget:
-      additionalProperties: false
       properties:
         id:
+          format: uuid
           type: string
         type:
           enum:
@@ -1368,7 +1601,7 @@ components:
         - type
       type: object
     NoteUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         body:
           type: string
@@ -1391,8 +1624,227 @@ components:
           maxLength: 200
           type: string
       type: object
+    OpCreateShape:
+      properties:
+        clientId:
+          type: string
+        data:
+          additionalProperties: {}
+          type: object
+        height:
+          format: double
+          type: number
+        kind:
+          enum:
+            - rectangle
+            - ellipse
+            - line
+            - arrow
+            - text
+            - freehand
+          type: string
+        op:
+          const: shape.create
+        rotation:
+          default: 0
+          format: double
+          type: number
+        style:
+          additionalProperties: {}
+          type: object
+        width:
+          format: double
+          type: number
+        x:
+          default: 0
+          format: double
+          type: number
+        "y":
+          default: 0
+          format: double
+          type: number
+        zIndex:
+          format: int32
+          type: integer
+      required:
+        - op
+        - kind
+      type: object
+    OpDeleteShape:
+      properties:
+        op:
+          const: shape.delete
+        shapeId:
+          format: uuid
+          type: string
+      required:
+        - op
+        - shapeId
+      type: object
+    OpLinkOverride:
+      properties:
+        hidden:
+          type: boolean
+        linkId:
+          format: uuid
+          type: string
+        op:
+          const: link.override
+        style:
+          additionalProperties: {}
+          type: object
+        waypoints:
+          items:
+            $ref: "#/components/schemas/Point"
+          type:
+            - array
+            - "null"
+      required:
+        - op
+        - linkId
+      type: object
+    OpLinkReset:
+      properties:
+        linkId:
+          format: uuid
+          type: string
+        op:
+          const: link.reset
+      required:
+        - op
+        - linkId
+      type: object
+    OpPlace:
+      properties:
+        clientId:
+          type: string
+        collapsed:
+          default: false
+          type: boolean
+        height:
+          exclusiveMinimum: 0
+          format: double
+          type: number
+        item:
+          $ref: "#/components/schemas/ItemRef"
+        op:
+          const: place
+        parentPlacementId:
+          format: uuid
+          type: string
+        style:
+          additionalProperties: {}
+          type: object
+        width:
+          exclusiveMinimum: 0
+          format: double
+          type: number
+        x:
+          default: 0
+          format: double
+          type: number
+        "y":
+          default: 0
+          format: double
+          type: number
+        zIndex:
+          format: int32
+          type: integer
+      required:
+        - op
+        - item
+      type: object
+    OpRemovePlacement:
+      properties:
+        op:
+          const: remove
+        placementId:
+          format: uuid
+          type: string
+      required:
+        - op
+        - placementId
+      type: object
+    OpUpdatePlacement:
+      properties:
+        collapsed:
+          type: boolean
+        height:
+          format: double
+          type:
+            - number
+            - "null"
+        op:
+          const: update
+        parentPlacementId:
+          format: uuid
+          type:
+            - string
+            - "null"
+        placementId:
+          format: uuid
+          type: string
+        style:
+          additionalProperties: {}
+          type: object
+        width:
+          format: double
+          type:
+            - number
+            - "null"
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+        zIndex:
+          format: int32
+          type: integer
+      required:
+        - op
+        - placementId
+      type: object
+    OpUpdateShape:
+      properties:
+        data:
+          additionalProperties: {}
+          type: object
+        height:
+          format: double
+          type:
+            - number
+            - "null"
+        op:
+          const: shape.update
+        rotation:
+          format: double
+          type: number
+        shapeId:
+          format: uuid
+          type: string
+        style:
+          additionalProperties: {}
+          type: object
+        width:
+          format: double
+          type:
+            - number
+            - "null"
+        x:
+          format: double
+          type: number
+        "y":
+          format: double
+          type: number
+        zIndex:
+          format: int32
+          type: integer
+      required:
+        - op
+        - shapeId
+      type: object
     Page:
-      additionalProperties: false
       properties:
         items:
           items:
@@ -1401,8 +1853,12 @@ components:
       required:
         - items
       type: object
+    Password:
+      maxLength: 256
+      minLength: 12
+      type: string
+      writeOnly: true
     PasswordChange:
-      additionalProperties: false
       properties:
         currentPassword:
           type: string
@@ -1417,7 +1873,6 @@ components:
         - newPassword
       type: object
     PasswordReset:
-      additionalProperties: false
       properties:
         newPassword:
           maxLength: 256
@@ -1428,51 +1883,62 @@ components:
         - newPassword
       type: object
     PlaceOn:
-      additionalProperties: false
       properties:
         canvasId:
           format: uuid
           type: string
         height:
+          exclusiveMinimum: 0
           format: double
           type: number
         parentPlacementId:
+          format: uuid
           type: string
         style:
           additionalProperties: {}
           type: object
         width:
+          exclusiveMinimum: 0
           format: double
           type: number
         x:
+          default: 0
           format: double
           type: number
         "y":
+          default: 0
           format: double
           type: number
       required:
         - canvasId
       type: object
     Placement:
-      additionalProperties: false
       properties:
         collapsed:
           type: boolean
         height:
           format: double
-          type: number
+          type:
+            - number
+            - "null"
         id:
+          format: uuid
           type: string
         item:
           $ref: "#/components/schemas/ItemRef"
         parentPlacementId:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         style:
           additionalProperties: {}
           type: object
         width:
           format: double
-          type: number
+          type:
+            - number
+            - "null"
         x:
           format: double
           type: number
@@ -1492,7 +1958,6 @@ components:
         - style
       type: object
     Point:
-      additionalProperties: false
       properties:
         x:
           format: double
@@ -1505,7 +1970,6 @@ components:
         - "y"
       type: object
     Problem:
-      additionalProperties: false
       properties:
         code:
           description: Stable machine-readable reason
@@ -1534,7 +1998,6 @@ components:
         - code
       type: object
     ProblemField:
-      additionalProperties: false
       properties:
         location:
           type: string
@@ -1545,7 +2008,6 @@ components:
         - message
       type: object
     ProviderOption:
-      additionalProperties: false
       properties:
         id:
           enum:
@@ -1559,7 +2021,6 @@ components:
         - name
       type: object
     PublicUser:
-      additionalProperties: false
       properties:
         displayName:
           type: string
@@ -1567,14 +2028,21 @@ components:
           format: uuid
           type: string
         username:
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{1,38}[A-Za-z0-9]$
           type: string
       required:
         - id
         - username
         - displayName
       type: object
+    Role:
+      enum:
+        - owner
+        - admin
+        - editor
+        - viewer
+      type: string
     SetupRequest:
-      additionalProperties: false
       properties:
         displayName:
           maxLength: 100
@@ -1601,7 +2069,6 @@ components:
         - password
       type: object
     SetupStatus:
-      additionalProperties: false
       properties:
         needsSetup:
           type: boolean
@@ -1609,17 +2076,26 @@ components:
         - needsSetup
       type: object
     Shape:
-      additionalProperties: false
       properties:
         data:
           additionalProperties: {}
           type: object
         height:
           format: double
-          type: number
+          type:
+            - number
+            - "null"
         id:
+          format: uuid
           type: string
         kind:
+          enum:
+            - rectangle
+            - ellipse
+            - line
+            - arrow
+            - text
+            - freehand
           type: string
         rotation:
           format: double
@@ -1629,7 +2105,9 @@ components:
           type: object
         width:
           format: double
-          type: number
+          type:
+            - number
+            - "null"
         x:
           format: double
           type: number
@@ -1649,8 +2127,16 @@ components:
         - style
         - data
       type: object
+    ShapeKind:
+      enum:
+        - rectangle
+        - ellipse
+        - line
+        - arrow
+        - text
+        - freehand
+      type: string
     ShareInfo:
-      additionalProperties: false
       properties:
         requiresPassword:
           type: boolean
@@ -1658,15 +2144,18 @@ components:
         - requiresPassword
       type: object
     ShareLink:
-      additionalProperties: false
       properties:
         canvasId:
+          format: uuid
           type: string
         createdAt:
           format: date-time
           type: string
         createdBy:
-          type: string
+          format: uuid
+          type:
+            - string
+            - "null"
         expiresAt:
           format: date-time
           type:
@@ -1675,6 +2164,7 @@ components:
         hasPassword:
           type: boolean
         id:
+          format: uuid
           type: string
         label:
           maxLength: 100
@@ -1701,7 +2191,6 @@ components:
         - useCount
       type: object
     ShareLinkCreate:
-      additionalProperties: false
       properties:
         expiresAt:
           format: date-time
@@ -1716,7 +2205,6 @@ components:
           writeOnly: true
       type: object
     ShareLinkCreated:
-      additionalProperties: false
       properties:
         shareLink:
           $ref: "#/components/schemas/ShareLink"
@@ -1731,7 +2219,6 @@ components:
         - url
       type: object
     ShareLinkPage:
-      additionalProperties: false
       properties:
         items:
           items:
@@ -1741,7 +2228,7 @@ components:
         - items
       type: object
     ShareLinkUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         expiresAt:
           format: date-time
@@ -1759,16 +2246,21 @@ components:
           writeOnly: true
       type: object
     ShareUnlock:
-      additionalProperties: false
       properties:
         password:
           type: string
           writeOnly: true
       type: object
+    Slug:
+      pattern: ^[a-z0-9][a-z0-9-]{0,62}$
+      type: string
+    Style:
+      additionalProperties: {}
+      type: object
     Target:
-      additionalProperties: false
       properties:
         id:
+          format: uuid
           type: string
         type:
           type: string
@@ -1776,8 +2268,10 @@ components:
         - type
         - id
       type: object
+    Timestamp:
+      format: date-time
+      type: string
     User:
-      additionalProperties: false
       properties:
         displayName:
           type: string
@@ -1792,22 +2286,44 @@ components:
         - username
         - displayName
       type: object
+    Username:
+      pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{1,38}[A-Za-z0-9]$
+      type: string
+    Version:
+      format: int32
+      minimum: 1
+      readOnly: true
+      type: integer
     Viewer:
-      additionalProperties: false
       properties:
         canEdit:
           type: boolean
         canViewSensitive:
           type: boolean
         role:
+          enum:
+            - owner
+            - admin
+            - editor
+            - viewer
+            - guest
           type: string
       required:
         - role
         - canEdit
         - canViewSensitive
       type: object
+    ViewerRole:
+      enum:
+        - owner
+        - admin
+        - editor
+        - viewer
+        - guest
+      type: string
+    Viewport:
+      $ref: "#/components/schemas/CanvasViewport"
     Workspace:
-      additionalProperties: false
       properties:
         createdAt:
           format: date-time
@@ -1834,8 +2350,7 @@ components:
           format: date-time
           type: string
         version:
-          format: int32
-          type: integer
+          $ref: "#/components/schemas/Version"
       required:
         - id
         - name
@@ -1849,7 +2364,6 @@ components:
         - version
       type: object
     WorkspaceCreate:
-      additionalProperties: false
       properties:
         description:
           type: string
@@ -1864,7 +2378,7 @@ components:
         - name
       type: object
     WorkspaceUpdate:
-      additionalProperties: false
+      minProperties: 1
       properties:
         description:
           type: string
@@ -2258,6 +2772,7 @@ paths:
           name: identityId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "204":
@@ -2741,6 +3256,7 @@ paths:
           name: userId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -2784,6 +3300,7 @@ paths:
           name: userId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -2841,6 +3358,7 @@ paths:
           name: userId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -3173,6 +3691,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -3227,11 +3746,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: areaId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -3335,11 +3856,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: areaId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -3411,11 +3934,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: areaId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -3454,6 +3979,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - explode: false
           in: query
@@ -3537,6 +4063,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -3574,6 +4101,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -3634,11 +4162,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -3688,11 +4218,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -3734,11 +4266,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -3809,11 +4343,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -3857,11 +4393,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -3910,11 +4448,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -3977,11 +4517,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -4026,11 +4568,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -4081,11 +4625,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: canvasId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "200":
@@ -4124,6 +4670,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - explode: false
           in: query
@@ -4165,6 +4712,8 @@ paths:
       tags:
         - Events
       x-permission: events.stream
+      x-sse-event-schema:
+        $ref: "#/components/schemas/Event"
   /workspaces/{wsId}/links:
     get:
       operationId: listLinks
@@ -4246,6 +4795,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -4300,11 +4850,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: linkId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -4402,11 +4954,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: linkId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -4834,6 +5388,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -4894,11 +5449,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: nodeId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -5002,11 +5559,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: nodeId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -5078,11 +5637,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: nodeId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -5265,6 +5826,7 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -5319,11 +5881,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: noteId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -5421,11 +5985,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: noteId
           required: true
           schema:
+            format: uuid
             type: string
         - in: header
           name: If-Match
@@ -5490,11 +6056,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: shareLinkId
           required: true
           schema:
+            format: uuid
             type: string
       responses:
         "204":
@@ -5534,11 +6102,13 @@ paths:
           name: wsId
           required: true
           schema:
+            format: uuid
             type: string
         - in: path
           name: shareLinkId
           required: true
           schema:
+            format: uuid
             type: string
       requestBody:
         content:
@@ -5585,3 +6155,26 @@ security:
   - session: []
 servers:
   - url: /api/v1
+x-client-schemas:
+  - $ref: "#/components/schemas/AreaColor"
+  - $ref: "#/components/schemas/AreaKind"
+  - $ref: "#/components/schemas/AuthProvider"
+  - $ref: "#/components/schemas/CanvasSettings"
+  - $ref: "#/components/schemas/HealthStatus"
+  - $ref: "#/components/schemas/Id"
+  - $ref: "#/components/schemas/InstanceRole"
+  - $ref: "#/components/schemas/LinkKind"
+  - $ref: "#/components/schemas/Me"
+  - $ref: "#/components/schemas/NodeCategory"
+  - $ref: "#/components/schemas/NoteColor"
+  - $ref: "#/components/schemas/NoteKind"
+  - $ref: "#/components/schemas/Password"
+  - $ref: "#/components/schemas/Role"
+  - $ref: "#/components/schemas/ShapeKind"
+  - $ref: "#/components/schemas/Slug"
+  - $ref: "#/components/schemas/Style"
+  - $ref: "#/components/schemas/Timestamp"
+  - $ref: "#/components/schemas/Username"
+  - $ref: "#/components/schemas/Version"
+  - $ref: "#/components/schemas/ViewerRole"
+  - $ref: "#/components/schemas/Viewport"

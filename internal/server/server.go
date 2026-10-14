@@ -81,6 +81,7 @@ func New(d Deps) (http.Handler, error) {
 		for _, f := range features(d) {
 			f.Register(api)
 		}
+		publishClientSchemas(api)
 	})
 	return r, nil
 }
@@ -144,6 +145,7 @@ func features(d Deps) []featureHandler {
 func apiConfig(dev bool) huma.Config {
 	huma.DefaultArrayNullable = false // the contract never uses null for arrays (send [])
 	cfg := huma.DefaultConfig("Netopology API", Version)
+	cfg.Components.Schemas = newWireRegistry()
 	cfg.CreateHooks = nil // no `$schema` fields / Link headers: the contract has none
 	cfg.Info.Description = "Draw, understand and operate your whole infrastructure. Contract: api/contract.yaml."
 	cfg.Info.License = &huma.License{Name: "Apache-2.0", Identifier: "Apache-2.0"}
@@ -180,6 +182,7 @@ func OpenAPI() *huma.OpenAPI {
 		for _, f := range features(Deps{Config: &config.Config{SessionTTL: time.Hour}}) {
 			f.Register(api)
 		}
+		publishClientSchemas(api)
 	})
 	return api.OpenAPI()
 }

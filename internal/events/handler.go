@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -18,9 +19,11 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 func (h *Handler) Register(api huma.API) {
+	api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[Event](), true, "Event")
 	op := httpx.Op(authz.EventsStream, http.MethodGet, "/workspaces/{wsId}/events", "streamEvents", "Events", "Live updates for this workspace (Server-Sent Events)", httpx.Errors(404))
 	op.Responses = map[string]*huma.Response{"200": {Description: "Event stream", Content: map[string]*huma.MediaType{"text/event-stream": {Schema: &huma.Schema{Type: "string", Description: "SSE stream; see the Event schema for the payload of each data: line."}}}}}
 	op.OperationID = "streamEvents"
+	op.Extensions["x-sse-event-schema"] = &huma.Schema{Ref: "#/components/schemas/Event"}
 	op.SkipValidateBody = true
 	huma.Register(api, op, h.stream)
 }
