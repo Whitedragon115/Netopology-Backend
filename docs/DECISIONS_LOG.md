@@ -40,3 +40,16 @@
 - WP-02 remote validation succeeded for web, setup/session/workspace, canvas/node view, guest sharing, audit, SSE and worker startup on PostgreSQL 18.6. The local-engine requirement remains explicitly pending; see DOCKER_VALIDATION.md.
 - Runtime: detected that the existing development backend still served 65 operations because a stale Air child held port 3100. Positively identified and restarted only that backend process tree. Its replacement serves all 72 operations on port 3100. No frontend process was killed or started. Local frontend was not listening during the final probe; its lifecycle stays with the frontend agent.
 - Frontend WP-15 and remaining UI tasks stay with the other agent. Do not mark them done from backend tests. Preserve all parent-repository frontend/design changes and commit only the backend submodule pointer for this work.
+
+## 2026-10-14 — B2 recovery review
+
+- Review the 15 direct B2 child issues at the start of this review, all 72 contract operations and their shared transaction/security/projection infrastructure. Inventory all 449 non-generated production function declarations for traceability; do not equate a declaration index with exhaustive branch or interleaving tests.
+- Stay on alpha in both repositories. Preserve the frontend agent's edits and processes. Do not start Docker Desktop, a new Docker stack or a dev server for this review.
+- Use disposable databases through the already configured remote PostgreSQL 18 test service for seven fresh fault/concurrency probes. Do not modify application data or print infrastructure credentials.
+- Distinguish transaction rollback, compensating writes, exact undo and operational backup restore. Do not invent restore endpoints or modify the canonical contract/merged migrations to make every action undoable.
+- Treat credential/session revocation as intentional security behavior: recovery must not resurrect old credentials, sessions or revoked share tokens.
+- Save counterexample probes under ignored .task/reviewproof, outside normal CI discovery; their PASS means the observed gap was reproduced. Convert these to expected-correct permanent tests when fixes are implemented.
+- Record six reproduced gaps and the positive outbox-failure rollback result in B2_RECOVERY_REVIEW.md. DRA-90 and DRA-91 remain pending; document their source gaps without claiming fresh proxy or Activity browser verification.
+- Standard strict checks passed with zero lint issues; normal tests reused valid Go cache, while review probes ran fresh without integration skips. Green existing checks do not establish universal undo safety.
+- Publish only high-level findings to Multica, omitting database addresses, credentials and commit IDs. Reuse existing DRA-90/DRA-91/DRA-98 tracking instead of duplicating their work.
+- Read all 104 project issues over two pages before adding DRA-117 through DRA-122 as B2 children. Preserve B2 in_review and DRA-90/DRA-91 todo; the completed review does not mark unresolved findings complete.
